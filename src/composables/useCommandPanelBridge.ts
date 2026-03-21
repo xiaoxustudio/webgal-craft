@@ -3,12 +3,14 @@ import type { commandType } from 'webgal-parser/src/interface/sceneInterface'
 import type { StatementGroup } from '~/stores/command-panel'
 
 export interface CommandPanelHandler {
+  isActive?: MaybeRefOrGetter<boolean>
   insertCommand: (type: commandType) => void
   insertGroup: (group: StatementGroup) => void
 }
 
 export interface CommandPanelBridgeContext {
   activeHandler: ShallowRef<CommandPanelHandler | undefined>
+  activeBinding: ShallowRef<CommandPanelHandler | undefined>
 }
 
 export const commandPanelBridgeKey: InjectionKey<CommandPanelBridgeContext> = Symbol('commandPanelBridge')
@@ -17,8 +19,10 @@ export const commandPanelBridgeKey: InjectionKey<CommandPanelBridgeContext> = Sy
  * 在 EditorPanel 层创建命令面板桥接上下文，provide 给子编辑器
  */
 export function useCommandPanelBridgeProvider(): CommandPanelBridgeContext {
+  const activeBinding = shallowRef<CommandPanelHandler>()
   const context: CommandPanelBridgeContext = {
-    activeHandler: shallowRef(),
+    activeHandler: activeBinding,
+    activeBinding,
   }
   provide(commandPanelBridgeKey, context)
   return context
@@ -34,8 +38,16 @@ export function useCommandPanelBridgeBinding(handler: CommandPanelHandler) {
   if (!context) {
     return
   }
+  const isComponentActive = ref(false)
+
+  function readIsActive(): boolean {
+    return handler.isActive === undefined ? true : toValue(handler.isActive)
+  }
 
   function register() {
+    if (!readIsActive()) {
+      return
+    }
     context!.activeHandler.value = handler
   }
 
@@ -45,8 +57,30 @@ export function useCommandPanelBridgeBinding(handler: CommandPanelHandler) {
     }
   }
 
-  onActivated(register)
-  onDeactivated(unregister)
-  onMounted(register)
-  onUnmounted(unregister)
+  onActivated(() => {
+    isComponentActive.value = true
+    register()
+  })
+  onDeactivated(() => {
+    isComponentActive.value = false
+    unregister()
+  })
+  onMounted(() => {
+    isComponentActive.value = true
+    register()
+  })
+  onUnmounted(() => {
+    isComponentActive.value = false
+    unregister()
+  })
+
+  if (handler.isActive !== undefined) {
+    watch(() => toValue(handler.isActive), (isActive) => {
+      if (isActive && isComponentActive.value) {
+        register()
+      } else {
+        unregister()
+      }
+    }, { immediate: true })
+  }
 }
