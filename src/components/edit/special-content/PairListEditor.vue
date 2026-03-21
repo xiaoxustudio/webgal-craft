@@ -21,25 +21,84 @@ const emit = defineEmits<{
 const isInline = $computed(() => props.surface === 'inline')
 const { buildControlId } = useControlId('pair-list')
 
-// 为每个 item 生成稳定的 key，避免用 index 导致增删时 DOM 复用错位
+interface PairListItem {
+  first: string
+  second: string
+}
+
 let nextKey = 0
 let itemKeys: number[] = []
 
-watch(() => props.items, (items, oldItems) => {
-  const prev = oldItems ?? []
-  const newKeys: number[] = []
-  for (const [i, item] of items.entries()) {
-    if (i < prev.length && prev[i] === item) {
-      newKeys.push(itemKeys[i])
-    } else {
-      newKeys.push(nextKey++)
-    }
+function areItemsEqual(left: PairListItem | undefined, right: PairListItem | undefined): boolean {
+  return !!left && !!right && left.first === right.first && left.second === right.second
+}
+
+function allocateKey(): number {
+  return nextKey++
+}
+
+function resolveItemKeys(items: PairListItem[], oldItems: PairListItem[] | undefined): number[] {
+  if (itemKeys.length === items.length) {
+    return [...itemKeys]
   }
-  itemKeys = newKeys
+
+  if (!oldItems || itemKeys.length === 0) {
+    return items.map(() => allocateKey())
+  }
+
+  const previousKeys = itemKeys
+  const nextKeys = Array.from({ length: items.length }, () => -1)
+  const maxComparableLength = Math.min(items.length, oldItems.length)
+
+  let prefixLength = 0
+  while (
+    prefixLength < maxComparableLength
+    && areItemsEqual(items[prefixLength], oldItems[prefixLength])
+  ) {
+    nextKeys[prefixLength] = previousKeys[prefixLength] ?? allocateKey()
+    prefixLength++
+  }
+
+  let suffixLength = 0
+  while (
+    suffixLength < maxComparableLength - prefixLength
+    && areItemsEqual(
+      items[items.length - 1 - suffixLength],
+      oldItems[oldItems.length - 1 - suffixLength],
+    )
+  ) {
+    nextKeys[items.length - 1 - suffixLength] = previousKeys[oldItems.length - 1 - suffixLength] ?? allocateKey()
+    suffixLength++
+  }
+
+  const editableLength = items.length - suffixLength
+  for (let i = prefixLength; i < editableLength; i++) {
+    nextKeys[i] = items.length === oldItems.length
+      ? (previousKeys[i] ?? allocateKey())
+      : allocateKey()
+  }
+
+  return nextKeys
+}
+
+watch(() => props.items, (items, oldItems) => {
+  itemKeys = resolveItemKeys(items, oldItems)
 }, { immediate: true })
 
 function itemKey(index: number): number {
   return itemKeys[index] ?? index
+}
+
+function handleAdd(): void {
+  itemKeys = [...itemKeys, allocateKey()]
+  emit('add')
+}
+
+function handleRemove(index: number): void {
+  const nextKeys = [...itemKeys]
+  nextKeys.splice(index, 1)
+  itemKeys = nextKeys
+  emit('remove', index)
 }
 
 function firstInputId(index: number): string {
@@ -81,7 +140,7 @@ function secondInputId(index: number): string {
           variant="ghost"
           size="sm"
           class="text-xs text-muted-foreground px-1.5 shrink-0 h-6 hover:text-destructive"
-          @click="emit('remove', i)"
+          @click="handleRemove(i)"
         >
           <div class="i-lucide-x size-3.5" />
         </Button>
@@ -99,7 +158,7 @@ function secondInputId(index: number): string {
               variant="ghost"
               size="sm"
               class="text-muted-foreground ml-auto p-1 size-6 hover:text-destructive"
-              @click="emit('remove', i)"
+              @click="handleRemove(i)"
             >
               <div class="i-lucide-x size-3.5" />
             </Button>
@@ -138,7 +197,7 @@ function secondInputId(index: number): string {
       variant="outline"
       size="sm"
       class="text-xs h-6 w-full shadow-none group-data-[surface=panel]:h-7"
-      @click="emit('add')"
+      @click="handleAdd"
     >
       <div class="i-lucide-plus mr-1 size-3.5" />
       {{ addLabel }}
