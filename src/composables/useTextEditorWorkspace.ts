@@ -3,6 +3,7 @@ import * as monaco from 'monaco-editor'
 
 import { useFileSystemEvents } from '~/composables/useFileSystemEvents'
 import { useTabsWatcher } from '~/composables/useTabsWatcher'
+import { isTextEditorModelPath, resolveTextEditorWorkspacePath } from '~/helper/text-editor-model-uri'
 import { normalizeEditorViewState } from '~/helper/text-editor-view-state'
 import { shouldRestoreTextEditorFocus } from '~/helper/text-editor-workspace-focus'
 import { useEditorViewStateStore } from '~/stores/editor-view-state'
@@ -100,7 +101,12 @@ export function useTextEditorWorkspace(options: UseTextEditorWorkspaceOptions) {
   }
 
   function readCurrentEditorPath(): string | undefined {
-    return readEditor()?.getModel()?.uri.toString()
+    return resolveTextEditorWorkspacePath({
+      activeTabPath: tabsStore.activeTab?.path,
+      modelUri: readEditor()?.getModel()?.uri.toString(),
+      openTabPaths: tabsStore.tabs.map(tab => tab.path),
+      trackedPaths: fileStates.keys(),
+    })
   }
 
   function flushCurrentViewState() {
@@ -166,7 +172,7 @@ export function useTextEditorWorkspace(options: UseTextEditorWorkspaceOptions) {
       return
     }
 
-    if (editor.getModel()?.uri.toString() !== path) {
+    if (!isTextEditorModelPath(editor.getModel()?.uri.toString(), path)) {
       persistViewState(fileStates.get(path)?.viewState)
       return
     }
