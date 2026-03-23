@@ -9,8 +9,51 @@ interface UseEffectDurationControlOptions {
 }
 
 export function useEffectDurationControl(options: UseEffectDurationControlOptions) {
+  let pendingDurationValue: string | undefined
+  let pendingDurationFrameId: number | undefined
+  let suppressDurationCommitOnEnd = false
+
   function updateDuration(value: string | number) {
     options.emitDuration(String(value ?? ''))
+  }
+
+  function cancelScheduledDurationEmit() {
+    if (pendingDurationFrameId === undefined) {
+      return
+    }
+
+    cancelAnimationFrame(pendingDurationFrameId)
+    pendingDurationFrameId = undefined
+  }
+
+  function flushPendingDurationEmit(): string | undefined {
+    if (pendingDurationValue === undefined) {
+      cancelScheduledDurationEmit()
+      return
+    }
+
+    const nextValue = pendingDurationValue
+    cancelScheduledDurationEmit()
+    updateDuration(nextValue)
+    pendingDurationValue = undefined
+    return nextValue
+  }
+
+  function scheduleDurationEmit(value: string | number) {
+    pendingDurationValue = String(value ?? '')
+    if (pendingDurationFrameId !== undefined) {
+      return
+    }
+
+    pendingDurationFrameId = requestAnimationFrame(() => {
+      pendingDurationFrameId = undefined
+      if (pendingDurationValue === undefined) {
+        return
+      }
+
+      updateDuration(pendingDurationValue)
+      pendingDurationValue = undefined
+    })
   }
 
   function getDurationNumberValue(): number {
@@ -48,11 +91,22 @@ export function useEffectDurationControl(options: UseEffectDurationControlOption
       }
 
       state.lastValue = nextValue
-      updateDuration(nextValue)
+      scheduleDurationEmit(nextValue)
     },
     onEnd(_event, state) {
+      const flushedValue = flushPendingDurationEmit()
       const finalValue = Math.max(0, Math.round(state.lastValue))
-      updateDuration(finalValue)
+      if (suppressDurationCommitOnEnd) {
+        suppressDurationCommitOnEnd = false
+        return
+      }
+
+      const normalizedFinalValue = String(finalValue)
+      if (flushedValue === normalizedFinalValue || options.getDuration() === normalizedFinalValue) {
+        return
+      }
+
+      updateDuration(normalizedFinalValue)
     },
   })
 
@@ -70,6 +124,11 @@ export function useEffectDurationControl(options: UseEffectDurationControlOption
     updateDuration,
     handleDurationLabelPointerDown,
     updateEase,
-    stopDurationScrub: () => durationScrub.stop(),
+    stopDurationScrub: () => {
+      suppressDurationCommitOnEnd = true
+      durationScrub.stop()
+      cancelScheduledDurationEmit()
+      pendingDurationValue = undefined
+    },
   }
 }
