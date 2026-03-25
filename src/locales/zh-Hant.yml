@@ -126,10 +126,12 @@ modals:
     title: 建立新遊戲
     description: 從這裡開始你的新創作
     gameName: 遊戲名稱
+    gameNameRequired: 遊戲名稱不能為空
     saveLocation: 儲存位置
     gameEngine: 遊戲引擎
     selectEngine: 選擇遊戲引擎
     create: 建立
+    createFailed: 建立遊戲失敗
     pathNotEmpty: 遊戲儲存目錄必須不存在或為空
     selectSaveLocation: 遊戲儲存位置
   deleteGame:
