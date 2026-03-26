@@ -1,10 +1,13 @@
-/* eslint-disable vue/one-component-per-file */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
-import { defineComponent, h } from 'vue'
 
-import { createBrowserLiteI18n } from '~/__tests__/browser'
+import {
+  createBrowserClickStub,
+  createBrowserContainerStub,
+  createBrowserInputStub,
+  createBrowserTextStub,
+  renderInBrowser,
+} from '~/__tests__/browser-render'
 
 const {
   useCommandPanelStoreMock,
@@ -86,100 +89,18 @@ const animationDialogState = {
 }
 
 const globalStubs = {
-  Button: defineComponent({
-    name: 'StubButton',
-    emits: ['click'],
-    setup(_, { attrs, emit, slots }) {
-      return () => h('button', {
-        ...attrs,
-        type: 'button',
-        onClick: (event: MouseEvent) => emit('click', event),
-      }, slots.default?.())
-    },
-  }),
-  Dialog: defineComponent({
-    name: 'StubDialog',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  DialogDescription: defineComponent({
-    name: 'StubDialogDescription',
-    setup(_, { slots }) {
-      return () => h('p', slots.default?.())
-    },
-  }),
-  DialogFooter: defineComponent({
-    name: 'StubDialogFooter',
-    setup(_, { slots }) {
-      return () => h('footer', slots.default?.())
-    },
-  }),
-  DialogHeader: defineComponent({
-    name: 'StubDialogHeader',
-    setup(_, { slots }) {
-      return () => h('header', slots.default?.())
-    },
-  }),
-  DialogScrollContent: defineComponent({
-    name: 'StubDialogScrollContent',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  DialogTitle: defineComponent({
-    name: 'StubDialogTitle',
-    setup(_, { slots }) {
-      return () => h('h2', slots.default?.())
-    },
-  }),
-  EffectEditorSubDialog: defineComponent({
-    name: 'StubEffectEditorSubDialog',
-    setup() {
-      return () => h('div', 'Effect Editor Sub Dialog')
-    },
-  }),
-  Input: defineComponent({
-    name: 'StubInput',
-    props: {
-      modelValue: {
-        default: '',
-        type: String,
-        required: false,
-      },
-      placeholder: {
-        default: '',
-        type: String,
-        required: false,
-      },
-    },
-    emits: ['update:modelValue'],
-    setup(props, { emit }) {
-      return () => h('input', {
-        placeholder: props.placeholder,
-        value: props.modelValue,
-        onInput: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).value),
-      })
-    },
-  }),
-  ScrollArea: defineComponent({
-    name: 'StubScrollArea',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  StatementAnimationSubDialog: defineComponent({
-    name: 'StubStatementAnimationSubDialog',
-    setup() {
-      return () => h('div', 'Statement Animation Sub Dialog')
-    },
-  }),
-  VisualEditorStatementCard: defineComponent({
-    name: 'StubVisualEditorStatementCard',
-    setup() {
-      return () => h('div', 'Visual Editor Statement Card')
-    },
-  }),
+  Button: createBrowserClickStub('StubButton'),
+  Dialog: createBrowserContainerStub('StubDialog'),
+  DialogDescription: createBrowserContainerStub('StubDialogDescription', 'p'),
+  DialogFooter: createBrowserContainerStub('StubDialogFooter', 'footer'),
+  DialogHeader: createBrowserContainerStub('StubDialogHeader', 'header'),
+  DialogScrollContent: createBrowserContainerStub('StubDialogScrollContent'),
+  DialogTitle: createBrowserContainerStub('StubDialogTitle', 'h2'),
+  EffectEditorSubDialog: createBrowserTextStub('StubEffectEditorSubDialog', 'Effect Editor Sub Dialog'),
+  Input: createBrowserInputStub('StubInput'),
+  ScrollArea: createBrowserContainerStub('StubScrollArea'),
+  StatementAnimationSubDialog: createBrowserTextStub('StubStatementAnimationSubDialog', 'Statement Animation Sub Dialog'),
+  VisualEditorStatementCard: createBrowserTextStub('StubVisualEditorStatementCard', 'Visual Editor Statement Card'),
 }
 
 describe('StatementGroupModal', () => {
@@ -204,7 +125,10 @@ describe('StatementGroupModal', () => {
   })
 
   it('在语句组弹窗中接入动画编辑器子对话框提供器', async () => {
-    render(StatementGroupModal, {
+    renderInBrowser(StatementGroupModal, {
+      browser: {
+        i18nMode: 'lite',
+      },
       props: {
         group: {
           createdAt: Date.parse('2026-03-23T00:00:00Z'),
@@ -215,7 +139,6 @@ describe('StatementGroupModal', () => {
         open: true,
       },
       global: {
-        plugins: [createBrowserLiteI18n()],
         stubs: globalStubs,
       },
     })

@@ -1,29 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
-import { defineComponent, h } from 'vue'
+
+import { createBrowserClickStub, renderInBrowser } from '~/__tests__/browser-render'
 
 import FilePickerRecentHistory from './FilePickerRecentHistory.vue'
 
 const globalStubs = {
-  Button: defineComponent({
-    name: 'StubButton',
-    emits: ['click'],
-    setup(_, { attrs, emit, slots }) {
-      return () => h('button', {
-        ...attrs,
-        type: 'button',
-        onClick: (event: MouseEvent) => emit('click', event),
-      }, slots.default?.())
-    },
-  }),
+  Button: createBrowserClickStub('StubButton'),
 }
 
 describe('FilePickerRecentHistory', () => {
   it('点击历史项时会发出 select 事件', async () => {
     const onSelect = vi.fn()
 
-    render(FilePickerRecentHistory, {
+    renderInBrowser(FilePickerRecentHistory, {
       props: {
         clearLabel: 'Clear recent history',
         invalidMap: {},
@@ -44,7 +34,7 @@ describe('FilePickerRecentHistory', () => {
   it('点击清空按钮时会发出 clear 事件', async () => {
     const onClear = vi.fn()
 
-    render(FilePickerRecentHistory, {
+    renderInBrowser(FilePickerRecentHistory, {
       props: {
         clearLabel: 'Clear recent history',
         invalidMap: {},
@@ -63,7 +53,7 @@ describe('FilePickerRecentHistory', () => {
   })
 
   it('按左右方向键时会在历史项之间移动焦点', async () => {
-    render(FilePickerRecentHistory, {
+    renderInBrowser(FilePickerRecentHistory, {
       props: {
         clearLabel: 'Clear recent history',
         invalidMap: {},

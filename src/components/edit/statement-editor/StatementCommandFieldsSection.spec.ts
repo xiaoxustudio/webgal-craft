@@ -1,17 +1,11 @@
-/* eslint-disable vue/one-component-per-file */
 import { describe, expect, it } from 'vitest'
 import { page } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
-import { defineComponent, h } from 'vue'
 
-import { createBrowserLiteI18n } from '~/__tests__/browser'
+import { createBrowserClickStub, createBrowserContainerStub, renderInBrowser } from '~/__tests__/browser-render'
 
 import StatementCommandFieldsSection from './StatementCommandFieldsSection.vue'
 
-import type {
-  StatementParamRendererSharedProps,
-  StatementSpecialContentBindings,
-} from './types'
+import type { StatementParamRendererSharedProps, StatementSpecialContentBindings } from './types'
 
 function createSpecialContentBindings(): StatementSpecialContentBindings {
   return {
@@ -45,34 +39,14 @@ function createParamRendererSharedProps(): StatementParamRendererSharedProps {
 }
 
 const globalStubs = {
-  Button: defineComponent({
-    name: 'StubButton',
-    emits: ['click'],
-    setup(_, { attrs, emit, slots }) {
-      return () => h('button', {
-        ...attrs,
-        type: 'button',
-        onClick: (event: MouseEvent) => emit('click', event),
-      }, slots.default?.())
-    },
-  }),
-  ParamRenderer: defineComponent({
-    name: 'StubParamRenderer',
-    setup() {
-      return () => h('div')
-    },
-  }),
-  StatementSpecialContentEditor: defineComponent({
-    name: 'StubStatementSpecialContentEditor',
-    setup() {
-      return () => h('div')
-    },
-  }),
+  Button: createBrowserClickStub('StubButton'),
+  ParamRenderer: createBrowserContainerStub('StubParamRenderer'),
+  StatementSpecialContentEditor: createBrowserContainerStub('StubStatementSpecialContentEditor'),
 }
 
 describe('StatementCommandFieldsSection', () => {
   it('顶部效果按钮受 showEffectEditorButton 控制', async () => {
-    render(StatementCommandFieldsSection, {
+    renderInBrowser(StatementCommandFieldsSection, {
       props: {
         surface: 'inline',
         statementType: 'command',
@@ -89,7 +63,6 @@ describe('StatementCommandFieldsSection', () => {
         onLabelPointerDown: () => { /* no-op */ },
       },
       global: {
-        plugins: [createBrowserLiteI18n()],
         stubs: globalStubs,
       },
     })
@@ -98,7 +71,7 @@ describe('StatementCommandFieldsSection', () => {
   })
 
   it('顶部效果按钮在 showEffectEditorButton 为 true 时显示', async () => {
-    render(StatementCommandFieldsSection, {
+    renderInBrowser(StatementCommandFieldsSection, {
       props: {
         surface: 'inline',
         statementType: 'command',
@@ -115,7 +88,6 @@ describe('StatementCommandFieldsSection', () => {
         onLabelPointerDown: () => { /* no-op */ },
       },
       global: {
-        plugins: [createBrowserLiteI18n()],
         stubs: globalStubs,
       },
     })

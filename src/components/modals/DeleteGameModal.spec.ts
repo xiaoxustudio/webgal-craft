@@ -1,12 +1,15 @@
-/* eslint-disable vue/one-component-per-file, vue/require-default-prop */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
-import { defineComponent, h } from 'vue'
+
+import {
+  createBrowserCheckboxStub,
+  createBrowserClickStub,
+  createBrowserContainerStub,
+  renderInBrowser,
+} from '~/__tests__/browser-render'
+import { createTestGame } from '~/__tests__/factories'
 
 import DeleteGameModal from './DeleteGameModal.vue'
-
-import type { Game } from '~/database/model'
 
 const {
   deleteGameMock,
@@ -66,83 +69,28 @@ vi.mock('vue-i18n', async importOriginal => ({
   }),
 }))
 
-function createStubContainer(name: string, tag: string = 'div') {
-  return defineComponent({
-    name,
-    setup(_, { attrs, slots }) {
-      return () => h(tag, attrs, slots.default?.())
-    },
-  })
-}
-
-function createStubButton(name: string) {
-  return defineComponent({
-    name,
-    emits: ['click'],
-    setup(_, { attrs, emit, slots }) {
-      return () => h('button', {
-        ...attrs,
-        type: 'button',
-        onClick: (event: MouseEvent) => emit('click', event),
-      }, slots.default?.())
-    },
-  })
-}
-
 const globalStubs = {
-  'AlertDialog': createStubContainer('StubAlertDialog'),
-  'AlertDialogAction': createStubButton('StubAlertDialogAction'),
-  'AlertDialogCancel': createStubButton('StubAlertDialogCancel'),
-  'AlertDialogContent': createStubContainer('StubAlertDialogContent'),
-  'AlertDialogDescription': createStubContainer('StubAlertDialogDescription'),
-  'AlertDialogFooter': createStubContainer('StubAlertDialogFooter'),
-  'AlertDialogHeader': createStubContainer('StubAlertDialogHeader'),
-  'AlertDialogTitle': createStubContainer('StubAlertDialogTitle', 'h2'),
-  'Checkbox': defineComponent({
-    name: 'StubCheckbox',
-    props: {
-      id: {
-        type: String,
-        required: false,
-      },
-      modelValue: Boolean,
-    },
-    emits: ['update:modelValue'],
-    setup(props, { attrs, emit }) {
-      return () => h('input', {
-        ...attrs,
-        checked: props.modelValue,
-        id: props.id,
-        type: 'checkbox',
-        onChange: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).checked),
-      })
-    },
-  }),
-  'i18n-t': defineComponent({
-    name: 'MockI18nT',
-    setup(_, { slots }) {
-      return () => h('span', slots.default?.())
-    },
-  }),
+  'AlertDialog': createBrowserContainerStub('StubAlertDialog'),
+  'AlertDialogAction': createBrowserClickStub('StubAlertDialogAction'),
+  'AlertDialogCancel': createBrowserClickStub('StubAlertDialogCancel'),
+  'AlertDialogContent': createBrowserContainerStub('StubAlertDialogContent'),
+  'AlertDialogDescription': createBrowserContainerStub('StubAlertDialogDescription'),
+  'AlertDialogFooter': createBrowserContainerStub('StubAlertDialogFooter'),
+  'AlertDialogHeader': createBrowserContainerStub('StubAlertDialogHeader'),
+  'AlertDialogTitle': createBrowserContainerStub('StubAlertDialogTitle', 'h2'),
+  'Checkbox': createBrowserCheckboxStub('StubCheckbox'),
+  'i18n-t': createBrowserContainerStub('MockI18nT', 'span'),
 }
 
-function createGame(): Game {
-  return {
-    id: 'game-1',
-    path: '/games/demo',
-    createdAt: 0,
-    lastModified: 0,
-    status: 'created',
+function renderDeleteGameModal(updateOpen = vi.fn()) {
+  const game = createTestGame({
     metadata: {
-      name: 'Demo Game',
-      icon: '',
       cover: '',
+      icon: '',
     },
-  }
-}
+  })
 
-function renderDeleteGameModal(game: Game, updateOpen = vi.fn()) {
-  render(DeleteGameModal, {
+  renderInBrowser(DeleteGameModal, {
     props: {
       'open': true,
       game,
@@ -157,6 +105,7 @@ function renderDeleteGameModal(game: Game, updateOpen = vi.fn()) {
   })
 
   return {
+    game,
     updateOpen,
   }
 }
@@ -176,8 +125,7 @@ describe('DeleteGameModal', () => {
   })
 
   it('默认确认会直接删除游戏并关闭模态框', async () => {
-    const game = createGame()
-    const { updateOpen } = renderDeleteGameModal(game)
+    const { game, updateOpen } = renderDeleteGameModal()
 
     await page.getByRole('button', { name: '确认' }).click()
 
@@ -187,8 +135,7 @@ describe('DeleteGameModal', () => {
   })
 
   it('勾选删除文件后会先打开二次确认模态框', async () => {
-    const game = createGame()
-    renderDeleteGameModal(game)
+    const { game } = renderDeleteGameModal()
 
     await page.getByRole('checkbox').click()
     await page.getByRole('button', { name: '确认' }).click()

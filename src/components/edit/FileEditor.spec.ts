@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
-import { defineComponent, h, reactive } from 'vue'
+import { reactive } from 'vue'
 
 import { createBrowserConsoleMonitor, createBrowserLocalizedI18n } from '~/__tests__/browser'
+import { createBrowserContainerStub, createBrowserTextStub, renderInBrowser } from '~/__tests__/browser-render'
 
 const {
   useEditorStoreMock,
@@ -52,31 +52,18 @@ vi.mock('~/composables/useVisualEditorSaveShortcut', () => ({
 
 import FileEditor from './FileEditor.vue'
 
-function createStubComponent(name: string, options: { tag?: string, text?: string }) {
-  const tag = options.tag ?? 'div'
-
-  return defineComponent({
-    name,
-    setup(_, { attrs, slots }) {
-      return () => options.text === undefined
-        ? h(tag, attrs, slots.default?.())
-        : h('div', options.text)
-    },
-  })
-}
-
 const globalStubs = {
-  AssetPreview: createStubComponent('StubAssetPreview', { text: 'Asset Preview' }),
-  Button: createStubComponent('StubButton', { tag: 'button' }),
-  Empty: createStubComponent('StubEmpty', {}),
-  EmptyContent: createStubComponent('StubEmptyContent', {}),
-  EmptyDescription: createStubComponent('StubEmptyDescription', {}),
-  EmptyHeader: createStubComponent('StubEmptyHeader', {}),
-  EmptyMedia: createStubComponent('StubEmptyMedia', {}),
-  EmptyTitle: createStubComponent('StubEmptyTitle', {}),
-  TextEditor: createStubComponent('StubTextEditor', { text: 'Text Editor' }),
-  VisualEditorAnimation: createStubComponent('StubVisualEditorAnimation', { text: 'Visual Editor Animation' }),
-  VisualEditorScene: createStubComponent('StubVisualEditorScene', { text: 'Visual Editor Scene' }),
+  AssetPreview: createBrowserTextStub('StubAssetPreview', 'Asset Preview'),
+  Button: createBrowserContainerStub('StubButton', 'button'),
+  Empty: createBrowserContainerStub('StubEmpty'),
+  EmptyContent: createBrowserContainerStub('StubEmptyContent'),
+  EmptyDescription: createBrowserContainerStub('StubEmptyDescription'),
+  EmptyHeader: createBrowserContainerStub('StubEmptyHeader'),
+  EmptyMedia: createBrowserContainerStub('StubEmptyMedia'),
+  EmptyTitle: createBrowserContainerStub('StubEmptyTitle'),
+  TextEditor: createBrowserTextStub('StubTextEditor', 'Text Editor'),
+  VisualEditorAnimation: createBrowserTextStub('StubVisualEditorAnimation', 'Visual Editor Animation'),
+  VisualEditorScene: createBrowserTextStub('StubVisualEditorScene', 'Visual Editor Scene'),
 }
 
 const { expectNoConsoleMessage } = createBrowserConsoleMonitor()
@@ -154,7 +141,7 @@ describe('FileEditor', () => {
       open: vi.fn(),
     })
 
-    render(FileEditor, {
+    renderInBrowser(FileEditor, {
       global: {
         plugins: [createFileEditorLocalizedI18n()],
         stubs: globalStubs,

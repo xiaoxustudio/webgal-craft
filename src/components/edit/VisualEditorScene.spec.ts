@@ -1,10 +1,8 @@
-/* eslint-disable vue/one-component-per-file, vue/require-default-prop */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
 import { computed, defineComponent, h, reactive } from 'vue'
 
-import { createBrowserLiteI18n } from '~/__tests__/browser'
+import { createBrowserContainerStub, renderInBrowser } from '~/__tests__/browser-render'
 
 import VisualEditorScene from './VisualEditorScene.vue'
 
@@ -45,21 +43,7 @@ vi.mock('~/composables/useVisualEditorSceneRuntime', () => ({
 }))
 
 const globalStubs = {
-  ScrollArea: defineComponent({
-    name: 'StubScrollArea',
-    props: {
-      style: {
-        type: Object,
-        required: false,
-      },
-    },
-    setup(props, { slots }) {
-      return () => h('div', {
-        'data-testid': 'scroll-area',
-        'style': props.style,
-      }, slots.default?.())
-    },
-  }),
+  ScrollArea: createBrowserContainerStub('StubScrollArea'),
   VisualEditorStatementCard: defineComponent({
     name: 'StubVisualEditorStatementCard',
     props: {
@@ -147,12 +131,11 @@ describe('VisualEditorScene', () => {
   })
 
   it('会渲染可视化语句列表和卡片内容', async () => {
-    render(VisualEditorScene, {
+    renderInBrowser(VisualEditorScene, {
       props: {
         state: createSceneState(),
       },
       global: {
-        plugins: [createBrowserLiteI18n()],
         stubs: globalStubs,
       },
     })
@@ -163,12 +146,11 @@ describe('VisualEditorScene', () => {
   })
 
   it('卡片事件会转发到 runtime 处理函数', async () => {
-    render(VisualEditorScene, {
+    renderInBrowser(VisualEditorScene, {
       props: {
         state: createSceneState(),
       },
       global: {
-        plugins: [createBrowserLiteI18n()],
         stubs: globalStubs,
       },
     })

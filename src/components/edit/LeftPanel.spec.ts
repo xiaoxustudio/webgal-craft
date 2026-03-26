@@ -1,10 +1,8 @@
-/* eslint-disable vue/one-component-per-file */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
 import { defineComponent, h, reactive } from 'vue'
 
-import { createBrowserLiteI18n } from '~/__tests__/browser'
+import { createBrowserContainerStub, createBrowserTextStub, renderInBrowser } from '~/__tests__/browser-render'
 
 const {
   usePreferenceStoreMock,
@@ -34,71 +32,14 @@ vi.mock('~/components/ui/resizable', () => {
 import LeftPanel from './LeftPanel.vue'
 
 const globalStubs = {
-  AssetPanel: defineComponent({
-    name: 'StubAssetPanel',
-    setup() {
-      return () => h('div', 'Asset Panel')
-    },
-  }),
-  PreviewPanel: defineComponent({
-    name: 'StubPreviewPanel',
-    setup() {
-      return () => h('div', 'Preview Panel')
-    },
-  }),
-  ResizableHandle: defineComponent({
-    name: 'StubResizableHandle',
-    setup() {
-      return () => h('div', 'Resize Handle')
-    },
-  }),
-  ResizablePanelGroup: defineComponent({
-    name: 'StubResizablePanelGroup',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  ScenePanel: defineComponent({
-    name: 'StubScenePanel',
-    setup() {
-      return () => h('div', 'Scene Panel')
-    },
-  }),
-  Tabs: defineComponent({
-    name: 'StubTabs',
-    props: {
-      modelValue: {
-        default: undefined,
-        type: String,
-        required: false,
-      },
-    },
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  TabsList: defineComponent({
-    name: 'StubTabsList',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  TabsTrigger: defineComponent({
-    name: 'StubTabsTrigger',
-    props: {
-      value: {
-        default: undefined,
-        type: String,
-        required: false,
-      },
-    },
-    setup(props, { slots }) {
-      return () => h('button', {
-        'type': 'button',
-        'data-value': props.value,
-      }, slots.default?.())
-    },
-  }),
+  AssetPanel: createBrowserTextStub('StubAssetPanel', 'Asset Panel'),
+  PreviewPanel: createBrowserTextStub('StubPreviewPanel', 'Preview Panel'),
+  ResizableHandle: createBrowserTextStub('StubResizableHandle', 'Resize Handle'),
+  ResizablePanelGroup: createBrowserContainerStub('StubResizablePanelGroup'),
+  ScenePanel: createBrowserTextStub('StubScenePanel', 'Scene Panel'),
+  Tabs: createBrowserContainerStub('StubTabs'),
+  TabsList: createBrowserContainerStub('StubTabsList'),
+  TabsTrigger: createBrowserContainerStub('StubTabsTrigger', 'button'),
 }
 
 describe('LeftPanel', () => {
@@ -115,9 +56,8 @@ describe('LeftPanel', () => {
       leftPanelView: 'scene',
     }))
 
-    render(LeftPanel, {
+    renderInBrowser(LeftPanel, {
       global: {
-        plugins: [createBrowserLiteI18n()],
         stubs: globalStubs,
       },
     })
@@ -132,9 +72,8 @@ describe('LeftPanel', () => {
       leftPanelView: 'resource',
     }))
 
-    render(LeftPanel, {
+    renderInBrowser(LeftPanel, {
       global: {
-        plugins: [createBrowserLiteI18n()],
         stubs: globalStubs,
       },
     })

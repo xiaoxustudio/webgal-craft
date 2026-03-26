@@ -1,10 +1,9 @@
-/* eslint-disable vue/one-component-per-file */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
-import { defineComponent, h, reactive, ref } from 'vue'
+import { reactive, ref } from 'vue'
 
 import { createBrowserLiteI18n } from '~/__tests__/browser'
+import { createBrowserClickStub, createBrowserContainerStub, renderInBrowser } from '~/__tests__/browser-render'
 
 const {
   copyMock,
@@ -62,41 +61,11 @@ vi.mock('notivue', () => ({
 import PreviewPanel from './PreviewPanel.vue'
 
 const globalStubs = {
-  Button: defineComponent({
-    name: 'StubButton',
-    emits: ['click'],
-    setup(_, { attrs, emit, slots }) {
-      return () => h('button', {
-        ...attrs,
-        type: 'button',
-        onClick: (event: MouseEvent) => emit('click', event),
-      }, slots.default?.())
-    },
-  }),
-  Tooltip: defineComponent({
-    name: 'StubTooltip',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  TooltipContent: defineComponent({
-    name: 'StubTooltipContent',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  TooltipProvider: defineComponent({
-    name: 'StubTooltipProvider',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  TooltipTrigger: defineComponent({
-    name: 'StubTooltipTrigger',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
+  Button: createBrowserClickStub('StubButton'),
+  Tooltip: createBrowserContainerStub('StubTooltip'),
+  TooltipContent: createBrowserContainerStub('StubTooltipContent'),
+  TooltipProvider: createBrowserContainerStub('StubTooltipProvider'),
+  TooltipTrigger: createBrowserContainerStub('StubTooltipTrigger'),
 }
 
 function createPreviewPanelLiteI18n() {
@@ -146,7 +115,7 @@ describe('PreviewPanel', () => {
   })
 
   it('挂载时会读取预览宽高比并渲染 iframe', async () => {
-    render(PreviewPanel, {
+    renderInBrowser(PreviewPanel, {
       global: {
         plugins: [createPreviewPanelLiteI18n()],
         stubs: globalStubs,
@@ -159,7 +128,7 @@ describe('PreviewPanel', () => {
   })
 
   it('点击复制和浏览器打开按钮会调用对应动作', async () => {
-    render(PreviewPanel, {
+    renderInBrowser(PreviewPanel, {
       global: {
         plugins: [createPreviewPanelLiteI18n()],
         stubs: globalStubs,
@@ -175,7 +144,7 @@ describe('PreviewPanel', () => {
   })
 
   it('点击刷新按钮会重新读取游戏配置', async () => {
-    render(PreviewPanel, {
+    renderInBrowser(PreviewPanel, {
       global: {
         plugins: [createPreviewPanelLiteI18n()],
         stubs: globalStubs,

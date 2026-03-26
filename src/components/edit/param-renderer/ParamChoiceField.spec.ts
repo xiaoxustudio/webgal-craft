@@ -1,8 +1,12 @@
-/* eslint-disable vue/one-component-per-file */
 import { describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
-import { defineComponent, h } from 'vue'
+
+import {
+  createBrowserActionStub,
+  createBrowserContainerStub,
+  createBrowserTextStub,
+  renderInBrowser,
+} from '~/__tests__/browser-render'
 
 import ParamChoiceField from './ParamChoiceField.vue'
 
@@ -30,47 +34,30 @@ function createChoiceField(): ArgEditorField {
 }
 
 function createSelectStub() {
-  return defineComponent({
-    name: 'SelectStub',
-    emits: ['update:model-value'],
-    setup(_props, { emit, slots }) {
-      return () => h('div', { 'data-testid': 'select-control' }, [
-        h('button', {
-          'data-testid': 'select-update',
-          'type': 'button',
-          'onClick': () => emit('update:model-value', 42),
-        }, 'emit select'),
-        slots.default?.(),
-      ])
-    },
+  return createBrowserActionStub('SelectStub', {
+    eventName: 'update:model-value',
+    includeDefaultSlot: true,
+    payload: 42,
+    testId: 'select-update',
+    text: 'emit select',
   })
 }
 
 function createComboboxStub() {
-  return defineComponent({
-    name: 'ComboboxStub',
-    emits: ['update:model-value'],
-    setup(_props, { emit }) {
-      return () => h('button', {
-        'data-testid': 'combobox-update',
-        'type': 'button',
-        'onClick': () => emit('update:model-value', 77),
-      }, 'emit combobox')
-    },
+  return createBrowserActionStub('ComboboxStub', {
+    eventName: 'update:model-value',
+    payload: 77,
+    testId: 'combobox-update',
+    text: 'emit combobox',
   })
 }
 
 function createSegmentedStub() {
-  return defineComponent({
-    name: 'SegmentedControlStub',
-    emits: ['update-select'],
-    setup(_props, { emit }) {
-      return () => h('button', {
-        'data-testid': 'segmented-update',
-        'type': 'button',
-        'onClick': () => emit('update-select', 99),
-      }, 'emit segmented')
-    },
+  return createBrowserActionStub('SegmentedControlStub', {
+    eventName: 'update-select',
+    payload: 99,
+    testId: 'segmented-update',
+    text: 'emit segmented',
   })
 }
 
@@ -104,38 +91,13 @@ function createInputStub() {
 const globalStubs = {
   Combobox: createComboboxStub(),
   Input: createInputStub(),
-  Label: defineComponent({
-    name: 'LabelStub',
-    setup(_props, { slots }) {
-      return () => h('label', slots.default?.())
-    },
-  }),
+  Label: createBrowserContainerStub('LabelStub', 'label'),
   SegmentedControl: createSegmentedStub(),
   Select: createSelectStub(),
-  SelectContent: defineComponent({
-    name: 'SelectContentStub',
-    setup(_props, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  SelectItem: defineComponent({
-    name: 'SelectItemStub',
-    setup(_props, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  SelectTrigger: defineComponent({
-    name: 'SelectTriggerStub',
-    setup(_props, { slots }) {
-      return () => h('button', { type: 'button' }, slots.default?.())
-    },
-  }),
-  SelectValue: defineComponent({
-    name: 'SelectValueStub',
-    setup() {
-      return () => h('span', 'SelectValue')
-    },
-  }),
+  SelectContent: createBrowserContainerStub('SelectContentStub'),
+  SelectItem: createBrowserContainerStub('SelectItemStub'),
+  SelectTrigger: createBrowserContainerStub('SelectTriggerStub', 'button'),
+  SelectValue: createBrowserTextStub('SelectValueStub', 'SelectValue', 'span'),
 }
 
 const baseOptions: ParamSelectOptionItem[] = [{ label: 'Hero', value: 'hero' }]
@@ -144,7 +106,7 @@ describe('ParamChoiceField', () => {
   it('segmented 选择会归一化后触发 updateSelect', async () => {
     const onUpdateSelect = vi.fn()
 
-    render(ParamChoiceField, {
+    renderInBrowser(ParamChoiceField, {
       props: {
         customInputId: 'target-custom-input',
         customOptionLabel: 'Custom',
@@ -173,7 +135,7 @@ describe('ParamChoiceField', () => {
   it('select 分支会透传并归一化 updateSelect', async () => {
     const onUpdateSelect = vi.fn()
 
-    render(ParamChoiceField, {
+    renderInBrowser(ParamChoiceField, {
       props: {
         customInputId: 'target-custom-input',
         customOptionLabel: 'Custom',
@@ -202,7 +164,7 @@ describe('ParamChoiceField', () => {
   it('combobox 分支会透传并归一化 updateSelect', async () => {
     const onUpdateSelect = vi.fn()
 
-    render(ParamChoiceField, {
+    renderInBrowser(ParamChoiceField, {
       props: {
         customInputId: 'target-custom-input',
         customOptionLabel: 'Custom',
@@ -231,7 +193,7 @@ describe('ParamChoiceField', () => {
   it('custom 模式显示自定义输入并触发 updateValue', async () => {
     const onUpdateValue = vi.fn()
 
-    render(ParamChoiceField, {
+    renderInBrowser(ParamChoiceField, {
       props: {
         customLabel: 'Custom target',
         customInputId: 'target-custom-input',
@@ -259,7 +221,7 @@ describe('ParamChoiceField', () => {
   })
 
   it('custom 模式会保留 0 这类有效假值', async () => {
-    render(ParamChoiceField, {
+    renderInBrowser(ParamChoiceField, {
       props: {
         customLabel: 'Custom target',
         customInputId: 'target-custom-input',

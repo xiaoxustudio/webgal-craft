@@ -1,10 +1,14 @@
-/* eslint-disable vue/one-component-per-file, vue/require-default-prop */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { render } from 'vitest-browser-vue'
 import { computed, defineComponent, h } from 'vue'
 
-import { createBrowserLiteI18n } from '~/__tests__/browser'
+import {
+  createBrowserClickStub,
+  createBrowserContainerStub,
+  createBrowserInputStub,
+  createBrowserTextStub,
+  renderInBrowser,
+} from '~/__tests__/browser-render'
 
 const {
   handleCommentChangeMock,
@@ -101,108 +105,16 @@ function createStatementEntry(id: number, rawText: string): StatementEntry {
 }
 
 const globalStubs = {
-  Button: defineComponent({
-    name: 'StubButton',
-    emits: ['click'],
-    setup(_, { attrs, emit, slots }) {
-      return () => h('button', {
-        ...attrs,
-        type: 'button',
-        onClick: (event: MouseEvent) => emit('click', event),
-      }, slots.default?.())
-    },
-  }),
-  Collapsible: defineComponent({
-    name: 'StubCollapsible',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  CollapsibleContent: defineComponent({
-    name: 'StubCollapsibleContent',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  CollapsibleTrigger: defineComponent({
-    name: 'StubCollapsibleTrigger',
-    setup(_, { attrs, slots }) {
-      return () => h('button', attrs, slots.default?.())
-    },
-  }),
-  Input: defineComponent({
-    name: 'StubInput',
-    props: {
-      modelValue: {
-        type: String,
-        required: false,
-      },
-      placeholder: {
-        type: String,
-        required: false,
-      },
-    },
-    emits: ['update:modelValue'],
-    setup(props, { emit }) {
-      return () => h('input', {
-        placeholder: props.placeholder,
-        value: props.modelValue,
-        onInput: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).value),
-      })
-    },
-  }),
-  InputGroup: defineComponent({
-    name: 'StubInputGroup',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  InputGroupAddon: defineComponent({
-    name: 'StubInputGroupAddon',
-    setup(_, { slots }) {
-      return () => h('div', slots.default?.())
-    },
-  }),
-  InputGroupButton: defineComponent({
-    name: 'StubInputGroupButton',
-    emits: ['click'],
-    setup(_, { attrs, emit, slots }) {
-      return () => h('button', {
-        ...attrs,
-        type: 'button',
-        onClick: (event: MouseEvent) => emit('click', event),
-      }, slots.default?.())
-    },
-  }),
-  InputGroupInput: defineComponent({
-    name: 'StubInputGroupInput',
-    props: {
-      disabled: Boolean,
-      modelValue: {
-        type: String,
-        required: false,
-      },
-      placeholder: {
-        type: String,
-        required: false,
-      },
-    },
-    emits: ['update:modelValue'],
-    setup(props, { emit }) {
-      return () => h('input', {
-        disabled: props.disabled,
-        placeholder: props.placeholder,
-        value: props.modelValue,
-        onInput: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).value),
-      })
-    },
-  }),
-  ParamRenderer: defineComponent({
-    name: 'StubParamRenderer',
-    setup() {
-      return () => h('div', 'ParamRenderer')
-    },
-  }),
+  Button: createBrowserClickStub('StubButton'),
+  Collapsible: createBrowserContainerStub('StubCollapsible'),
+  CollapsibleContent: createBrowserContainerStub('StubCollapsibleContent'),
+  CollapsibleTrigger: createBrowserContainerStub('StubCollapsibleTrigger', 'button'),
+  Input: createBrowserInputStub('StubInput'),
+  InputGroup: createBrowserContainerStub('StubInputGroup'),
+  InputGroupAddon: createBrowserContainerStub('StubInputGroupAddon'),
+  InputGroupButton: createBrowserClickStub('StubInputGroupButton'),
+  InputGroupInput: createBrowserInputStub('StubInputGroupInput'),
+  ParamRenderer: createBrowserTextStub('StubParamRenderer', 'ParamRenderer'),
   StatementCommandFieldsSection: defineComponent({
     name: 'StubStatementCommandFieldsSection',
     emits: ['openAnimationEditor', 'openEffectEditor'],
@@ -220,12 +132,7 @@ const globalStubs = {
       ])
     },
   }),
-  StatementSpecialContentEditor: defineComponent({
-    name: 'StubStatementSpecialContentEditor',
-    setup() {
-      return () => h('div', 'SpecialContentEditor')
-    },
-  }),
+  StatementSpecialContentEditor: createBrowserTextStub('StubStatementSpecialContentEditor', 'SpecialContentEditor'),
 }
 
 describe('StatementEditorInline', () => {
@@ -247,12 +154,11 @@ describe('StatementEditorInline', () => {
       statementType: 'say',
     }))
 
-    render(StatementEditorInline, {
+    renderInBrowser(StatementEditorInline, {
       props: {
         entry: createStatementEntry(21, 'Alice:hello'),
       },
       global: {
-        plugins: [createBrowserLiteI18n()],
         stubs: globalStubs,
       },
     })
@@ -280,14 +186,13 @@ describe('StatementEditorInline', () => {
       },
     }))
 
-    render(StatementEditorInline, {
+    renderInBrowser(StatementEditorInline, {
       props: {
         entry: createStatementEntry(22, 'changeBg:bg.jpg'),
         onOpenAnimationEditor,
         onOpenEffectEditor,
       },
       global: {
-        plugins: [createBrowserLiteI18n()],
         stubs: globalStubs,
       },
     })
