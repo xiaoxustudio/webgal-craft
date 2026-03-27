@@ -1,18 +1,23 @@
+import { createPinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, nextTick, reactive } from 'vue'
 
 import { renderInBrowser } from '~/__tests__/browser-render'
+import { useShortcutContext } from '~/features/editor/shortcut/useShortcutContext'
+import { useShortcutDispatcher } from '~/features/editor/shortcut/useShortcutDispatcher'
 
 const {
   handleErrorMock,
   renameFileMock,
+  useModalStoreMock,
   useEditorUIStateStoreMock,
   useTabsStoreMock,
   useWorkspaceStoreMock,
 } = vi.hoisted(() => ({
   handleErrorMock: vi.fn(),
   renameFileMock: vi.fn(),
+  useModalStoreMock: vi.fn(),
   useEditorUIStateStoreMock: vi.fn(),
   useTabsStoreMock: vi.fn(),
   useWorkspaceStoreMock: vi.fn(),
@@ -38,6 +43,10 @@ vi.mock('~/services/game-fs', () => ({
 
 vi.mock('~/stores/editor-ui-state', () => ({
   useEditorUIStateStore: useEditorUIStateStoreMock,
+}))
+
+vi.mock('~/stores/modal', () => ({
+  useModalStore: useModalStoreMock,
 }))
 
 vi.mock('~/stores/tabs', () => ({
@@ -74,7 +83,7 @@ interface FileTreeTestItem extends Record<string, unknown> {
 
 interface FlattenedTreeItem {
   _id: string
-  bind: Record<string, never>
+  bind: Record<string, unknown>
   hasChildren: boolean
   index: number
   level: number
@@ -193,12 +202,19 @@ const globalStubs = {
         required: false,
       },
     },
-    setup(props, { slots }) {
+    emits: ['update:expanded', 'update:modelValue'],
+    setup(props, { emit, slots }) {
       return () => h('div', slots.default?.({
         flattenItems: flattenItems(
           props.items as FileTreeTestItem[],
           props.getKey as (item: Record<string, unknown>) => string,
-        ),
+        ).map(item => ({
+          ...item,
+          bind: {
+            ...item.bind,
+            onClick: () => emit('update:modelValue', item.value),
+          },
+        })),
       }))
     },
   }),
@@ -235,6 +251,76 @@ const globalStubs = {
   }),
 }
 
+function renderFileTree(props: Record<string, unknown>) {
+  const ShortcutHarness = defineComponent({
+    name: 'FileTreeShortcutHarness',
+    setup() {
+      useShortcutDispatcher({
+        bindings: [],
+        executeContext: {},
+        platform: 'windows',
+      })
+
+      useShortcutContext({
+        commandPanelOpen: false,
+        editorMode: 'visual',
+        hasSelection: false,
+        isDirty: false,
+        isModalOpen: false,
+        panelFocus: 'none',
+        visualType: 'scene',
+      })
+
+      return () => h(FileTree as never, props as never)
+    },
+  })
+
+  return renderInBrowser(ShortcutHarness, {
+    global: {
+      plugins: [createPinia()],
+      stubs: globalStubs,
+    },
+  })
+}
+
+function renderReactiveFileTree(initialProps: Record<string, unknown>) {
+  const reactiveProps = reactive({ ...initialProps })
+
+  const ShortcutHarness = defineComponent({
+    name: 'ReactiveFileTreeShortcutHarness',
+    setup() {
+      useShortcutDispatcher({
+        bindings: [],
+        executeContext: {},
+        platform: 'windows',
+      })
+
+      useShortcutContext({
+        commandPanelOpen: false,
+        editorMode: 'visual',
+        hasSelection: false,
+        isDirty: false,
+        isModalOpen: false,
+        panelFocus: 'none',
+        visualType: 'scene',
+      })
+
+      return () => h(FileTree as never, { ...reactiveProps } as never)
+    },
+  })
+
+  renderInBrowser(ShortcutHarness, {
+    global: {
+      plugins: [createPinia()],
+      stubs: globalStubs,
+    },
+  })
+
+  return {
+    reactiveProps,
+  }
+}
+
 describe('FileTree', () => {
   afterEach(() => {
     vi.clearAllMocks()
@@ -243,11 +329,15 @@ describe('FileTree', () => {
   beforeEach(() => {
     handleErrorMock.mockReset()
     renameFileMock.mockReset()
+    useModalStoreMock.mockReset()
     useEditorUIStateStoreMock.mockReset()
     useTabsStoreMock.mockReset()
     useWorkspaceStoreMock.mockReset()
 
     renameFileMock.mockResolvedValue('/project/renamed.txt')
+    useModalStoreMock.mockReturnValue({
+      open: vi.fn(),
+    })
     useEditorUIStateStoreMock.mockReturnValue({
       getFileTreeExpanded: vi.fn(() => []),
       setFileTreeExpanded: vi.fn(),
@@ -263,15 +353,10 @@ describe('FileTree', () => {
   })
 
   it('加载中时会显示加载指示', async () => {
-    renderInBrowser(FileTree, {
-      props: {
-        getKey: (item: Record<string, unknown>) => String(item.path),
-        isLoading: true,
-        items: [],
-      },
-      global: {
-        stubs: globalStubs,
-      },
+    renderFileTree({
+      getKey: (item: Record<string, unknown>) => String(item.path),
+      isLoading: true,
+      items: [],
     })
 
     await expect.element(page.getByRole('status', { name: 'common.loading' })).toBeInTheDocument()
@@ -280,20 +365,15 @@ describe('FileTree', () => {
   it('点击文件项会发出 click 事件', async () => {
     const onClick = vi.fn()
 
-    renderInBrowser(FileTree, {
-      props: {
-        getKey: (item: Record<string, unknown>) => String(item.path),
-        items: [
-          {
-            name: 'scene.txt',
-            path: '/project/scene.txt',
-          },
-        ],
-        onClick,
-      },
-      global: {
-        stubs: globalStubs,
-      },
+    renderFileTree({
+      getKey: (item: Record<string, unknown>) => String(item.path),
+      items: [
+        {
+          name: 'scene.txt',
+          path: '/project/scene.txt',
+        },
+      ],
+      onClick,
     })
 
     await page.getByText('scene.txt').click()
@@ -306,19 +386,14 @@ describe('FileTree', () => {
   })
 
   it('按 F2 重命名后回车会调用 gameFs.renameFile', async () => {
-    renderInBrowser(FileTree, {
-      props: {
-        getKey: (item: Record<string, unknown>) => String(item.path),
-        items: [
-          {
-            name: 'scene.txt',
-            path: '/project/scene.txt',
-          },
-        ],
-      },
-      global: {
-        stubs: globalStubs,
-      },
+    renderFileTree({
+      getKey: (item: Record<string, unknown>) => String(item.path),
+      items: [
+        {
+          name: 'scene.txt',
+          path: '/project/scene.txt',
+        },
+      ],
     })
 
     const treeItem = page.getByRole('treeitem').first()
@@ -331,5 +406,172 @@ describe('FileTree', () => {
     await userEvent.keyboard('{Enter}')
 
     expect(renameFileMock).toHaveBeenCalledWith('/project/scene.txt', 'renamed.txt')
+  })
+
+  it('禁用上下文菜单后，按 F2 不会触发重命名', async () => {
+    renderFileTree({
+      enableContextMenu: false,
+      getKey: (item: Record<string, unknown>) => String(item.path),
+      items: [
+        {
+          name: 'scene.txt',
+          path: '/project/scene.txt',
+        },
+      ],
+    })
+
+    const treeItem = page.getByRole('treeitem').first()
+    await treeItem.click()
+    await userEvent.keyboard('{F2}')
+
+    await expect.element(page.getByRole('textbox')).not.toBeInTheDocument()
+    expect(renameFileMock).not.toHaveBeenCalled()
+  })
+
+  it('键盘焦点移动到其他条目后，F2 会重命名当前焦点条目', async () => {
+    renderFileTree({
+      getKey: (item: Record<string, unknown>) => String(item.path),
+      items: [
+        {
+          name: 'first.txt',
+          path: '/project/first.txt',
+        },
+        {
+          name: 'second.txt',
+          path: '/project/second.txt',
+        },
+      ],
+    })
+
+    const firstTreeItem = page.getByRole('treeitem').nth(0)
+    const secondTreeItem = page.getByRole('treeitem').nth(1)
+
+    await firstTreeItem.click()
+
+    const secondTreeItemElement = await secondTreeItem.element()
+    secondTreeItemElement.focus()
+    await userEvent.keyboard('{F2}')
+
+    const textbox = page.getByRole('textbox')
+    await textbox.fill('renamed-second.txt')
+    await textbox.click()
+    await userEvent.keyboard('{Enter}')
+
+    expect(renameFileMock).toHaveBeenCalledWith('/project/second.txt', 'renamed-second.txt')
+  })
+
+  it('按 Delete 会打开删除文件确认弹窗', async () => {
+    const modalStore = {
+      open: vi.fn(),
+    }
+    useModalStoreMock.mockReturnValue(modalStore)
+
+    renderFileTree({
+      getKey: (item: Record<string, unknown>) => String(item.path),
+      items: [
+        {
+          name: 'scene.txt',
+          path: '/project/scene.txt',
+        },
+      ],
+    })
+
+    const treeItem = page.getByRole('treeitem').first()
+    await treeItem.click()
+    await userEvent.keyboard('{Delete}')
+
+    expect(modalStore.open).toHaveBeenCalledWith('DeleteFileModal', {
+      file: {
+        isDir: false,
+        name: 'scene.txt',
+        path: '/project/scene.txt',
+      },
+    })
+  })
+
+  it('禁用上下文菜单后，按 Delete 不会打开删除文件确认弹窗', async () => {
+    const modalStore = {
+      open: vi.fn(),
+    }
+    useModalStoreMock.mockReturnValue(modalStore)
+
+    renderFileTree({
+      enableContextMenu: false,
+      getKey: (item: Record<string, unknown>) => String(item.path),
+      items: [
+        {
+          name: 'scene.txt',
+          path: '/project/scene.txt',
+        },
+      ],
+    })
+
+    const treeItem = page.getByRole('treeitem').first()
+    await treeItem.click()
+    await userEvent.keyboard('{Delete}')
+
+    expect(modalStore.open).not.toHaveBeenCalled()
+  })
+
+  it('运行时启用上下文菜单后，F2 会开始触发重命名', async () => {
+    const { reactiveProps } = renderReactiveFileTree({
+      enableContextMenu: false,
+      getKey: (item: Record<string, unknown>) => String(item.path),
+      items: [
+        {
+          name: 'scene.txt',
+          path: '/project/scene.txt',
+        },
+      ],
+    })
+
+    const treeItem = page.getByRole('treeitem').first()
+    await treeItem.click()
+
+    reactiveProps.enableContextMenu = true
+    await nextTick()
+    await nextTick()
+
+    await userEvent.keyboard('{F2}')
+
+    await expect.element(page.getByRole('textbox')).toBeInTheDocument()
+  })
+
+  it('键盘焦点移动到其他条目后，Delete 会作用到当前焦点条目', async () => {
+    const modalStore = {
+      open: vi.fn(),
+    }
+    useModalStoreMock.mockReturnValue(modalStore)
+
+    renderFileTree({
+      getKey: (item: Record<string, unknown>) => String(item.path),
+      items: [
+        {
+          name: 'first.txt',
+          path: '/project/first.txt',
+        },
+        {
+          name: 'second.txt',
+          path: '/project/second.txt',
+        },
+      ],
+    })
+
+    const firstTreeItem = page.getByRole('treeitem').nth(0)
+    const secondTreeItem = page.getByRole('treeitem').nth(1)
+
+    await firstTreeItem.click()
+
+    const secondTreeItemElement = await secondTreeItem.element()
+    secondTreeItemElement.focus()
+    await userEvent.keyboard('{Delete}')
+
+    expect(modalStore.open).toHaveBeenCalledWith('DeleteFileModal', {
+      file: {
+        isDir: false,
+        name: 'second.txt',
+        path: '/project/second.txt',
+      },
+    })
   })
 })

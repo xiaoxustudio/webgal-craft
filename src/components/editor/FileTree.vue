@@ -3,6 +3,9 @@ import { LucideFile, LucideFolder, LucideFolderOpen } from 'lucide-vue-next'
 
 import FileTreeContextMenu from '~/components/editor/FileTreeContextMenu.vue'
 import { useFileTreeController } from '~/features/editor/file-tree/useFileTreeController'
+import { useShortcut } from '~/features/editor/shortcut/useShortcut'
+import { useShortcutContext } from '~/features/editor/shortcut/useShortcutContext'
+import { useModalStore } from '~/stores/modal'
 import { FileViewerSortBy, FileViewerSortOrder } from '~/types/file-viewer'
 
 import type { FlattenedItem } from 'reka-ui'
@@ -52,6 +55,7 @@ const emit = defineEmits<{
 }>()
 
 const selectedItem = defineModel<T>('selectedItem')
+const modalStore = useModalStore()
 
 const { t } = useI18n()
 const scrollAreaRef: Readonly<ShallowRef<unknown>> = useTemplateRef('scrollAreaRef')
@@ -74,7 +78,6 @@ const {
   handleCreateBlur,
   handleEnterKey,
   handleEscapeKey,
-  handleF2Key,
   handleRename,
   handleRenameBlur,
   isCreateDuplicate,
@@ -108,6 +111,94 @@ defineExpose({
   collapseAll,
   getViewportElement,
 })
+
+function toSelectedFileItem() {
+  const currentSelectedItem = selectedItem.value as Record<string, unknown> | undefined
+  if (!currentSelectedItem || typeof currentSelectedItem.path !== 'string') {
+    return
+  }
+
+  return {
+    isDir: Array.isArray(currentSelectedItem.children),
+    name: getItemName(selectedItem.value as T),
+    path: currentSelectedItem.path,
+  }
+}
+
+function toFocusedFileItem() {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  const activeElement = document.activeElement
+  if (!(activeElement instanceof HTMLElement) || !fileTreeContainerRef.value?.contains(activeElement)) {
+    return
+  }
+
+  const treeItemElement = activeElement.closest<HTMLElement>('[data-file-tree-path]')
+  const itemPath = treeItemElement?.dataset.fileTreePath
+  if (!itemPath) {
+    return
+  }
+
+  const focusedItem = itemMap.get(itemPath)
+  return focusedItem ? toFileItem(focusedItem) : undefined
+}
+
+function toShortcutTargetFileItem() {
+  return toFocusedFileItem() ?? toSelectedFileItem()
+}
+
+function handleShortcutRename() {
+  if (!enableContextMenu) {
+    return
+  }
+
+  const fileItem = toShortcutTargetFileItem()
+  if (!fileItem) {
+    return
+  }
+
+  handleContextMenuRename(fileItem)
+}
+
+function handleShortcutDelete() {
+  if (!enableContextMenu) {
+    return
+  }
+
+  const fileItem = toShortcutTargetFileItem()
+  if (!fileItem) {
+    return
+  }
+
+  modalStore.open('DeleteFileModal', {
+    file: fileItem,
+  })
+}
+
+useShortcutContext({
+  panelFocus: 'fileTree',
+}, {
+  target: fileTreeContainerRef,
+  trackFocus: true,
+})
+
+useShortcut(() => ({
+  execute: handleShortcutRename,
+  i18nKey: 'shortcut.fileTree.rename',
+  id: 'fileTree.rename',
+  keys: enableContextMenu ? 'F2' : '',
+  when: { panelFocus: 'fileTree' },
+}))
+
+useShortcut(() => ({
+  execute: handleShortcutDelete,
+  i18nKey: 'shortcut.fileTree.delete',
+  id: 'fileTree.delete',
+  keys: enableContextMenu ? 'Delete' : '',
+  when: { panelFocus: 'fileTree' },
+}))
 </script>
 
 <template>
@@ -187,8 +278,8 @@ defineExpose({
                 v-bind="item.bind"
                 :level="item.level"
                 :has-children="item.hasChildren"
+                :data-file-tree-path="toFileItem(item as FlattenedItem<T>).path"
                 class="cursor-pointer"
-                @keydown.f2.prevent="handleF2Key(item as FlattenedItem<T>)"
                 @keydown.enter.prevent="handleEnterKey(item as FlattenedItem<T>)"
                 @keydown.escape.prevent="handleEscapeKey(item as FlattenedItem<T>)"
                 @click="() => {
