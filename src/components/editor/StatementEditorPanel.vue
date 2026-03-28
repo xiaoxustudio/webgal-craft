@@ -4,10 +4,7 @@ import { StatementEntry } from '~/domain/script/sentence'
 import { useStatementAnimationEditorBridge } from '~/features/editor/animation/useStatementAnimationEditorBridge'
 import { useStatementEffectEditorBridge } from '~/features/editor/effect-editor/useStatementEffectEditorBridge'
 import { useShortcutContext } from '~/features/editor/shortcut/useShortcutContext'
-import {
-  normalizeStatementPanelSingleLineValue,
-  resolveStatementPanelPreviewImageUrl,
-} from '~/features/editor/statement-editor/panel'
+import { normalizeStatementPanelSingleLineValue, resolveStatementPanelPreviewMedia } from '~/features/editor/statement-editor/panel'
 import { statementEditorSurfaceKey } from '~/features/editor/statement-editor/surface-context'
 import { isStatementInteractiveTarget, useStatementEditor } from '~/features/editor/statement-editor/useStatementEditor'
 import { useEditSettingsStore } from '~/stores/edit-settings'
@@ -55,6 +52,7 @@ const {
   hasVisibleAdvancedParams,
   content,
   misc,
+  params,
   say,
   view,
   paramRenderer,
@@ -114,15 +112,45 @@ watch(
 const editSettings = useEditSettingsStore()
 const workspaceStore = useWorkspaceStore()
 
-const previewImageUrl = $computed(() => resolveStatementPanelPreviewImageUrl({
-  command: parsed.value?.command,
-  content: parsed.value?.content,
-  contentField: contentField.value,
-  cwd: workspaceStore.CWD,
-  fileRootPaths: resource.fileRootPaths.value,
-  previewBaseUrl: workspaceStore.currentGameServeUrl,
-  showSidebarAssetPreview: editSettings.showSidebarAssetPreview,
-}))
+const previewMedia = $computed(() => {
+  const previewContext = {
+    cwd: workspaceStore.CWD,
+    fileRootPaths: resource.fileRootPaths.value,
+    previewBaseUrl: workspaceStore.currentGameServeUrl,
+    showSidebarAssetPreview: editSettings.showSidebarAssetPreview,
+  }
+
+  const contentPreview = resolveStatementPanelPreviewMedia({
+    ...previewContext,
+    content: parsed.value?.content,
+    contentField: contentField.value,
+  })
+  if (contentPreview) {
+    return contentPreview
+  }
+
+  for (const field of view.basicRenderFields.value) {
+    if (field.storage !== 'arg' || field.field.type !== 'file' || !params.isFieldVisible(field)) {
+      continue
+    }
+
+    const argValue = params.readArgRuntimeValue(field.argField)
+    if (typeof argValue !== 'string' || argValue === '') {
+      continue
+    }
+
+    const argPreview = resolveStatementPanelPreviewMedia({
+      ...previewContext,
+      content: argValue,
+      contentField: field,
+    })
+    if (argPreview) {
+      return argPreview
+    }
+  }
+
+  return
+})
 
 function handleBlankDblClick(e: MouseEvent) {
   if (isStatementInteractiveTarget(e.target)) {
@@ -190,8 +218,12 @@ useShortcutContext({
     <!-- 可滚动参数区域 -->
     <ScrollArea v-if="!config.locked" class="flex-1" @dblclick="handleBlankDblClick">
       <div class="flex flex-col gap-3" :class="inline ? 'px-1 py-0' : 'p-4'">
-        <!-- 资源图片预览 -->
-        <StatementAssetPreview v-if="previewImageUrl" :src="previewImageUrl" />
+        <!-- 资源媒体预览 -->
+        <StatementAssetPreview
+          v-if="previewMedia"
+          :src="previewMedia.url"
+          :mime-type="previewMedia.mimeType"
+        />
 
         <!-- 空行 / 注释 -->
         <template v-if="statementType === 'empty' || statementType === 'comment'">

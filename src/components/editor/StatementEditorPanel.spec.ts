@@ -1,6 +1,12 @@
+import '~/__tests__/mocks/i18n'
+import '~/__tests__/mocks/modal-store'
+import '~/__tests__/mocks/router'
+import '~/__tests__/mocks/tauri-fs'
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
 import { computed, defineComponent, h, reactive } from 'vue'
+import { commandType } from 'webgal-parser/src/interface/sceneInterface'
 
 import {
   createBrowserClickStub,
@@ -14,10 +20,17 @@ const {
   handleCommentChangeMock,
   handleInlineCommentChangeMock,
   handleRawTextChangeMock,
+  gameAssetDirMock,
+  gameSceneDirMock,
+  loggerDebugMock,
+  loggerErrorMock,
+  loggerInfoMock,
+  loggerWarnMock,
   openAnimationEditorMock,
   handleSpeakerChangeMock,
   openEffectEditorMock,
   toggleNarrationModeMock,
+  useFileSystemEventsMock,
   useEditSettingsStoreMock,
   useStatementAnimationEditorBridgeMock,
   useStatementEditorMock,
@@ -27,10 +40,17 @@ const {
   handleCommentChangeMock: vi.fn(),
   handleInlineCommentChangeMock: vi.fn(),
   handleRawTextChangeMock: vi.fn(),
+  gameAssetDirMock: vi.fn(),
+  gameSceneDirMock: vi.fn(),
+  loggerDebugMock: vi.fn(),
+  loggerErrorMock: vi.fn(),
+  loggerInfoMock: vi.fn(),
+  loggerWarnMock: vi.fn(),
   openAnimationEditorMock: vi.fn(),
   handleSpeakerChangeMock: vi.fn(),
   openEffectEditorMock: vi.fn(),
   toggleNarrationModeMock: vi.fn(),
+  useFileSystemEventsMock: vi.fn(),
   useEditSettingsStoreMock: vi.fn(),
   useStatementAnimationEditorBridgeMock: vi.fn(),
   useStatementEditorMock: vi.fn(),
@@ -77,6 +97,23 @@ vi.mock('~/stores/edit-settings', () => ({
 
 vi.mock('~/stores/workspace', () => ({
   useWorkspaceStore: useWorkspaceStoreMock,
+}))
+
+vi.mock('~/services/platform/app-paths', () => ({
+  gameAssetDir: gameAssetDirMock,
+  gameSceneDir: gameSceneDirMock,
+}))
+
+vi.mock('~/composables/useFileSystemEvents', () => ({
+  useFileSystemEvents: useFileSystemEventsMock,
+}))
+
+vi.mock('@tauri-apps/plugin-log', () => ({
+  debug: loggerDebugMock,
+  error: loggerErrorMock,
+  info: loggerInfoMock,
+  trace: vi.fn(),
+  warn: loggerWarnMock,
 }))
 
 import StatementEditorPanel from './StatementEditorPanel.vue'
@@ -151,6 +188,10 @@ function createEditorReturn(overrides: Record<string, unknown> = {}) {
       handleUpdateValue: vi.fn(),
       sharedProps: computed(() => ({})),
     },
+    params: {
+      isFieldVisible: vi.fn(() => true),
+      readArgRuntimeValue: vi.fn(() => undefined),
+    },
     ...overrides,
   }
 }
@@ -200,7 +241,26 @@ const globalStubs = {
       }, slots.default?.())
     },
   }),
-  StatementAssetPreview: createBrowserContainerStub('StubStatementAssetPreview', 'img'),
+  StatementAssetPreview: defineComponent({
+    name: 'StubStatementAssetPreview',
+    props: {
+      mimeType: {
+        type: String,
+        required: false,
+      },
+      src: {
+        type: String,
+        required: true,
+      },
+    },
+    setup(props) {
+      return () => h('div', {
+        'data-mime-type': props.mimeType,
+        'data-testid': 'statement-asset-preview',
+        'data-url': props.src,
+      })
+    },
+  }),
   StatementCommandFieldsSection: defineComponent({
     name: 'StubStatementCommandFieldsSection',
     emits: ['openAnimationEditor', 'openEffectEditor'],
@@ -247,6 +307,13 @@ describe('StatementEditorPanel', () => {
     openAnimationEditorMock.mockReset()
     openEffectEditorMock.mockReset()
     toggleNarrationModeMock.mockReset()
+    gameAssetDirMock.mockReset()
+    gameSceneDirMock.mockReset()
+    loggerDebugMock.mockReset()
+    loggerErrorMock.mockReset()
+    loggerInfoMock.mockReset()
+    loggerWarnMock.mockReset()
+    useFileSystemEventsMock.mockReset()
     useEditSettingsStoreMock.mockReset()
     useStatementAnimationEditorBridgeMock.mockReset()
     useStatementEditorMock.mockReset()
@@ -262,10 +329,15 @@ describe('StatementEditorPanel', () => {
     useStatementAnimationEditorBridgeMock.mockReturnValue({
       openAnimationEditor: openAnimationEditorMock,
     })
+    useFileSystemEventsMock.mockReturnValue({
+      on: vi.fn(),
+    })
     useWorkspaceStoreMock.mockReturnValue(reactive({
       CWD: '/games/demo',
       currentGameServeUrl: 'http://127.0.0.1:8899',
     }))
+    gameAssetDirMock.mockImplementation(async (_cwd: string, assetType: string) => `/games/demo/assets/${assetType}`)
+    gameSceneDirMock.mockResolvedValue('/games/demo/scene')
   })
 
   it('点击标题会触发 focusStatement，点击效果编辑器会打开桥接弹窗', async () => {
@@ -402,5 +474,71 @@ describe('StatementEditorPanel', () => {
 
     expect(openEffectEditorMock).toHaveBeenCalledTimes(1)
     expect(openAnimationEditorMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('会把侧边栏媒体预览的 URL 和 MIME 类型传给预览组件', async () => {
+    useEditSettingsStoreMock.mockReturnValue({
+      showSidebarAssetPreview: true,
+    })
+    useStatementEditorMock.mockReturnValue(createEditorReturn({
+      parsed: computed(() => ({
+        command: commandType.video,
+        content: 'opening.webm',
+        inlineComment: '',
+      })),
+      statementType: 'command',
+      contentField: computed(() => ({
+        key: 'content',
+        storage: 'content',
+        field: {
+          key: 'content',
+          label: 'video',
+          type: 'file',
+          fileConfig: {
+            assetType: 'video',
+            extensions: ['.webm'],
+            title: 'video',
+          },
+        },
+      })),
+      resource: {
+        fileRootPaths: computed(() => ({
+          video: '/games/demo/assets/video',
+        })),
+      },
+      view: {
+        basicRenderFields: computed(() => []),
+        commandRenderFields: computed(() => []),
+        effectEditorAtTop: computed(() => false),
+        showAnimationEditorButton: computed(() => false),
+        showEffectEditorButton: computed(() => false),
+        specialContentMode: computed(() => undefined),
+      },
+    }))
+
+    renderStatementEditorPanel({
+      entry: createStatementEntry(13, 'video:opening.webm'),
+    })
+
+    await expect.element(page.getByTestId('statement-asset-preview')).toHaveAttribute('data-url', 'http://127.0.0.1:8899/assets/video/opening.webm')
+    await expect.element(page.getByTestId('statement-asset-preview')).toHaveAttribute('data-mime-type', 'video/webm')
+  })
+
+  it('say 语句会把 vocal 参数解析为侧边栏音频预览', async () => {
+    const { useStatementEditor } = await vi.importActual<typeof import('~/features/editor/statement-editor/useStatementEditor')>(
+      '~/features/editor/statement-editor/useStatementEditor',
+    )
+
+    useEditSettingsStoreMock.mockReturnValue({
+      showSidebarAssetPreview: true,
+    })
+    useStatementEditorMock.mockImplementation(options => useStatementEditor(options))
+
+    renderStatementEditorPanel({
+      entry: createStatementEntry(14, 'Alice:Hello -vocal=voice/theme.ogg'),
+    })
+
+    await expect.element(page.getByTestId('statement-asset-preview')).toHaveAttribute('data-url', 'http://127.0.0.1:8899/assets/vocal/voice/theme.ogg')
+    await expect.element(page.getByTestId('statement-asset-preview')).toHaveAttribute('data-mime-type', 'audio/ogg')
   })
 })
