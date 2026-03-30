@@ -9,6 +9,8 @@ import type { SortableItemAccessor } from '~/utils/sort'
 interface FileViewerProps {
   /** 要展示的文件/文件夹列表 */
   items: FileViewerItem[]
+  /** 当前需要额外高亮的条目路径 */
+  highlightedItemPath?: string
   /** 调用方可选提供图片预览地址解析器，通用文件视图本身不绑定具体预览实现 */
   resolvePreviewUrl?: (item: FileViewerItem, previewSize: FileViewerPreviewSize) => string | undefined
   /** 视图模式 */
@@ -42,11 +44,19 @@ interface FileViewerEmits {
 
 interface FileViewerExpose {
   scrollToIndex: (index: number) => void
+  scrollToItemPath: (path: string) => void
   viewport: HTMLElement | undefined
 }
 
+defineSlots<{
+  'icon'?: (props: { item: FileViewerItem, iconSize: number }) => unknown
+  'context-menu'?: (props: { item: FileViewerItem }) => unknown
+  'background-context-menu'?: () => unknown
+}>()
+
 const {
   items,
+  highlightedItemPath,
   resolvePreviewUrl,
   viewMode = 'list',
   sortBy = 'name',
@@ -82,6 +92,14 @@ const fileViewerAccessor: SortableItemAccessor<FileViewerItem> = {
 
 const sortedItems = computed(() =>
   items.toSorted(createItemComparator(sortBy, sortOrder, fileViewerAccessor)),
+)
+
+const isEmptyState = computed(() =>
+  !isLoading && !errorMsg && sortedItems.value.length === 0,
+)
+
+const shouldShowState = computed(() =>
+  isLoading || !!errorMsg || isEmptyState.value,
 )
 
 const virtualizer = useFileViewerVirtualizer({
@@ -123,8 +141,18 @@ function scrollToIndex(index: number) {
   virtualizer.scrollToIndex(index)
 }
 
+function scrollToItemPath(path: string) {
+  const targetIndex = sortedItems.value.findIndex(item => item.path === path)
+  if (targetIndex === -1) {
+    return
+  }
+
+  scrollToIndex(targetIndex)
+}
+
 const fileViewerExpose: FileViewerExpose = {
   scrollToIndex,
+  scrollToItemPath,
   get viewport() {
     return viewportElement.value
   },
@@ -149,15 +177,31 @@ defineExpose(fileViewerExpose)
     />
     <div class="flex-1 min-h-0">
       <ScrollArea ref="scrollAreaRef" class="flex-scroll-area h-full min-h-0">
+        <ContextMenu v-if="isEmptyState && $slots['background-context-menu']">
+          <ContextMenuTrigger as-child>
+            <div class="h-full min-h-0">
+              <FileViewerState
+                :is-loading="isLoading"
+                :error-msg="errorMsg"
+                :is-empty="isEmptyState"
+              />
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent class="w-52" @close-auto-focus.prevent>
+            <slot name="background-context-menu" />
+          </ContextMenuContent>
+        </ContextMenu>
+
         <FileViewerState
-          v-if="isLoading || errorMsg || sortedItems.length === 0"
+          v-else-if="shouldShowState"
           :is-loading="isLoading"
           :error-msg="errorMsg"
-          :is-empty="!isLoading && !errorMsg && sortedItems.length === 0"
+          :is-empty="isEmptyState"
         />
 
         <FileViewerBody
           v-else
+          :highlighted-item-path="highlightedItemPath"
           :view-mode="viewMode"
           :virtual-rows="virtualizer.virtualRows.value"
           :total-size="virtualizer.totalSize.value"
@@ -176,6 +220,12 @@ defineExpose(fileViewerExpose)
         >
           <template v-if="$slots.icon" #icon="{ item, iconSize }">
             <slot name="icon" :item="item" :icon-size="iconSize" />
+          </template>
+          <template v-if="$slots['context-menu']" #context-menu="{ item }">
+            <slot name="context-menu" :item="item" />
+          </template>
+          <template v-if="$slots['background-context-menu']" #background-context-menu>
+            <slot name="background-context-menu" />
           </template>
         </FileViewerBody>
       </ScrollArea>
