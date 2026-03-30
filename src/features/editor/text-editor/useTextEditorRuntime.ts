@@ -4,6 +4,7 @@ import { isAnimationDocumentTextValid } from '~/domain/document/animation-docume
 import { resolveTextEditorLanguage } from '~/features/editor/text-editor/text-editor-language'
 import { applySceneCursorTarget, prepareSceneCursorTarget } from '~/features/editor/text-editor/text-editor-scene-restore'
 import { resolveSceneCursorTarget, resolveScenePreviewLine } from '~/features/editor/text-editor/text-editor-scene-sync'
+import { didResumeSingleEditTarget, readEditorHasMultipleEditTargets } from '~/features/editor/text-editor/text-editor-selection'
 import { isEditableEditor, useEditorStore } from '~/stores/editor'
 import { useTabsStore } from '~/stores/tabs'
 
@@ -192,6 +193,15 @@ export function useTextEditorRuntime(options: UseTextEditorRuntimeOptions) {
     textEditorWorkspace.saveViewState(state.value.path)
   }, 300)
 
+  function syncSceneFromCursorLine(lineNumber: number) {
+    if (readSceneLineNumber() === lineNumber && readSelectedSceneStatementId() !== undefined) {
+      return
+    }
+
+    syncSceneSelection(lineNumber)
+    syncScene()
+  }
+
   function handleCursorPositionChange(event: monaco.editor.ICursorPositionChangedEvent) {
     textEditorHistory.rememberCurrentCursorSnapshot()
 
@@ -205,20 +215,25 @@ export function useTextEditorRuntime(options: UseTextEditorRuntimeOptions) {
 
     debouncedSaveViewState()
 
-    if (readSceneLineNumber() === position.lineNumber && readSelectedSceneStatementId() !== undefined) {
+    if (readEditorHasMultipleEditTargets(readEditor())) {
       return
     }
 
-    syncSceneSelection(position.lineNumber)
-    syncScene()
+    syncSceneFromCursorLine(position.lineNumber)
   }
 
   function handleScrollChange() {
     debouncedSaveViewState()
   }
 
-  function handleCursorSelectionChange() {
+  function handleCursorSelectionChange(event: monaco.editor.ICursorSelectionChangedEvent) {
     textEditorHistory.rememberCurrentCursorSnapshot()
+
+    if (didResumeSingleEditTarget(event)) {
+      syncSceneFromCursorLine(event.selection.positionLineNumber)
+    }
+
+    textEditorBindings.handleCursorSelectionChange(event)
   }
 
   function handleContentChange(event: monaco.editor.IModelContentChangedEvent) {
