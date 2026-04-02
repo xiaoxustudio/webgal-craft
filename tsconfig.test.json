@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "types": [
+      "node",
+      "vite/client",
+      "vite-plugin-vue-meta-layouts/client",
+      "vue-macros/macros-global",
+      "unplugin-info/client",
+      "./src/route-map.d.ts",
+    ]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue",
+    "scripts/**/*.js",
+    "integration/**/*.ts",
+    "integration/**/*.d.ts"
+  ],
+  "exclude": []
+}
