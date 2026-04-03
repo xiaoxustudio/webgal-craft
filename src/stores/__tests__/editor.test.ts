@@ -7,11 +7,22 @@ import { useTabsStore } from '../tabs'
 
 type WriteDocumentFile = typeof import('~/services/game-fs').gameFs.writeDocumentFile
 
+const {
+  handleErrorMock,
+  tabsWatcherCloseHandlerRef,
+} = vi.hoisted(() => ({
+  handleErrorMock: vi.fn(),
+  tabsWatcherCloseHandlerRef: {
+    current: undefined as ((path: string) => void) | undefined,
+  },
+}))
+
 const readFileMock = vi.fn(async () => new TextEncoder().encode('hello'))
 const statMock = vi.fn(async () => ({ size: 5 }))
 const writeDocumentFileMock = vi.fn<WriteDocumentFile>(async () => undefined)
 const isBinaryFileMock = vi.fn(async () => false)
 const syncSceneMock = vi.fn(async () => undefined)
+const refetchTemplatesMock = vi.fn(async () => undefined)
 const loggerWarnMock = vi.fn()
 const loggerErrorMock = vi.fn()
 const loggerDebugMock = vi.fn()
@@ -80,7 +91,9 @@ vi.mock('~/composables/useFileSystemEvents', () => ({
 }))
 
 vi.mock('~/features/editor/shared/useTabsWatcher', () => ({
-  useTabsWatcher: vi.fn((_onTabClosed: (path: string) => void) => undefined),
+  useTabsWatcher: vi.fn((onTabClosed: (path: string) => void) => {
+    tabsWatcherCloseHandlerRef.current = onTabClosed
+  }),
 }))
 
 vi.mock('~/services/game-fs', () => ({
@@ -98,6 +111,7 @@ vi.mock('~/stores/modal', () => ({
 vi.mock('~/services/debug-commander', () => ({
   debugCommander: {
     syncScene: syncSceneMock,
+    refetchTemplates: refetchTemplatesMock,
   },
 }))
 
@@ -118,7 +132,7 @@ vi.mock('~/plugins/mime', () => ({
 }))
 
 vi.mock('~/utils/error-handler', () => ({
-  handleError: vi.fn(),
+  handleError: handleErrorMock,
 }))
 
 async function flushEditorWatchers() {
@@ -220,6 +234,8 @@ describe('编辑器状态仓库的文本与文档流程', () => {
     writeDocumentFileMock.mockReset()
     isBinaryFileMock.mockReset()
     syncSceneMock.mockReset()
+    refetchTemplatesMock.mockReset()
+    handleErrorMock.mockReset()
     loggerWarnMock.mockClear()
     loggerErrorMock.mockClear()
     loggerDebugMock.mockClear()
@@ -232,6 +248,7 @@ describe('编辑器状态仓库的文本与文档流程', () => {
     syncSceneMock.mockImplementation(async () => undefined)
     mimeGetTypeMock.mockReturnValue('text/plain')
     fileSystemEventHandlers.clear()
+    tabsWatcherCloseHandlerRef.current = undefined
     modalOpenMock.mockReset()
     externalDocumentModalAction = 'cancel'
     modalOpenMock.mockImplementation((_name: string, payload: Record<string, () => void>) => {
@@ -368,6 +385,77 @@ describe('编辑器状态仓库的文本与文档流程', () => {
     expect(editorStore.currentVisualProjection).toBeUndefined()
     expect(editorStore.canToggleMode).toBe(false)
   }, asyncFixtureTimeoutMs * 2)
+
+  it('保存模板样式文件后刷新模板', async () => {
+    const tabsStore = useTabsStore()
+    const path = '/game/template/example.css'
+
+    const editorStore = useEditorStore()
+
+    await openTabAndWaitFor(tabsStore, 'example.css', path, () => editorStore.hasState(path), 'load template document for save refresh')
+
+    editorStore.applyTextDocumentContent(path, 'body { color: red; }')
+
+    await editorStore.saveFile(path)
+
+    expect(refetchTemplatesMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('保存期间会使用保存快照中的模板类型执行后置效果', async () => {
+    const tabsStore = useTabsStore()
+    const path = '/game/template/save-race.css'
+    const writeDeferred = createDeferred<void>()
+
+    readFileMock.mockResolvedValueOnce(new TextEncoder().encode('body { color: black; }'))
+    writeDocumentFileMock.mockImplementationOnce(async () => {
+      await writeDeferred.promise
+    })
+
+    const editorStore = useEditorStore()
+
+    await openTabAndWaitFor(tabsStore, 'save-race.css', path, () => editorStore.hasState(path), 'load template document for save race')
+
+    editorStore.applyTextDocumentContent(path, 'body { color: red; }')
+
+    const savePromise = editorStore.saveFile(path)
+
+    expect(tabsWatcherCloseHandlerRef.current).toBeDefined()
+    if (!tabsWatcherCloseHandlerRef.current) {
+      throw new TypeError('missing tabs watcher close handler')
+    }
+    tabsWatcherCloseHandlerRef.current(path)
+    expect(refetchTemplatesMock).not.toHaveBeenCalled()
+    writeDeferred.resolve()
+
+    await savePromise
+
+    expect(refetchTemplatesMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('模板刷新失败时走统一错误处理', async () => {
+    const tabsStore = useTabsStore()
+    const path = '/game/template/refetch-failure.css'
+    const refetchError = new Error('refetch failed')
+
+    refetchTemplatesMock.mockRejectedValueOnce(refetchError)
+
+    const editorStore = useEditorStore()
+
+    await openTabAndWaitFor(tabsStore, 'refetch-failure.css', path, () => editorStore.hasState(path), 'load template document for refetch error')
+
+    editorStore.applyTextDocumentContent(path, 'body { color: red; }')
+
+    await editorStore.saveFile(path)
+    await flushEditorWatchers()
+
+    expect(handleErrorMock).toHaveBeenCalledTimes(1)
+    expect(handleErrorMock.mock.calls[0]?.[1]).toEqual({ silent: true })
+    expect(handleErrorMock.mock.calls[0]?.[0]).toMatchObject({
+      code: 'EDITOR_ERROR',
+      message: '刷新模板失败',
+      cause: refetchError,
+    })
+  })
 
   it('为预览资源保存媒体会话并在重命名时迁移', async () => {
     const tabsStore = useTabsStore()
@@ -1145,6 +1233,39 @@ describe('编辑器状态仓库的文本与文档流程', () => {
 
     await editorStore.saveFile(path)
 
+    expect(syncSceneMock).toHaveBeenCalledWith(path, 1, 'hello!', false)
+  })
+
+  it('第二个保存钩子失败时仍保留已完成的场景预览同步', async () => {
+    const tabsStore = useTabsStore()
+    const path = '/game/scene/text-save-preview-hook-failure.txt'
+    const saveHookError = new Error('save hook failed')
+    let hookCalls = 0
+
+    readFileMock.mockResolvedValueOnce(new TextEncoder().encode('hello'))
+    mimeGetTypeMock.mockReturnValue('text/plain')
+
+    const editorStore = useEditorStore()
+
+    await openTabAndWaitFor(
+      tabsStore,
+      'text-save-preview-hook-failure.txt',
+      path,
+      () => editorStore.currentTextProjection !== undefined && editorStore.currentVisualProjection !== undefined,
+      'load text save preview projections with failing save hook',
+    )
+
+    editorStore.registerSaveHook(path, () => {
+      hookCalls++
+      if (hookCalls === 2) {
+        throw saveHookError
+      }
+    })
+
+    editorStore.applyTextDocumentContent(path, 'hello!')
+    editorStore.syncSceneSelectionFromTextLine(path, 1)
+
+    await expect(editorStore.saveFile(path)).rejects.toThrow(saveHookError)
     expect(syncSceneMock).toHaveBeenCalledWith(path, 1, 'hello!', false)
   })
 
