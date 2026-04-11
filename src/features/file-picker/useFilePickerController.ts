@@ -63,6 +63,8 @@ export function useFilePickerController(options: UseFilePickerControllerOptions)
   const currentDir = ref('')
   const inputText = ref('')
   const filterKeyword = ref('')
+  const searchQuery = ref('')
+  const appliedSearchQuery = ref('')
   const items = ref<FileViewerItem[]>([])
   const isLoading = ref(false)
   const errorMsg = ref('')
@@ -73,27 +75,37 @@ export function useFilePickerController(options: UseFilePickerControllerOptions)
   const skipInputWatch = ref(false)
   let latestReadId = 0
   let latestRootId = 0
+  let latestInputSyncId = 0
 
   const canOpen = computed(() => !options.disabled() && isRootReady.value && !!canonicalRootPath.value)
   const filteredItems = computed(() => {
-    const keyword = filterKeyword.value.trim().toLocaleLowerCase()
+    const filterKeywordText = filterKeyword.value.trim().toLocaleLowerCase()
+    const searchKeywordText = appliedSearchQuery.value.trim().toLocaleLowerCase()
     return items.value
       .map(item => ({ ...item, isSupported: item.isDir || isExtensionSupported(item.name) }))
       .filter((item) => {
+        const itemName = item.name.toLocaleLowerCase()
         if (!item.isDir && excludeSet.value.size > 0 && excludeSet.value.has(item.name.toLowerCase())) {
           return false
         }
         if (options.showSupportedOnly() && item.isSupported === false) {
           return false
         }
-        if (!keyword) {
-          return true
+        if (filterKeywordText && !itemName.startsWith(filterKeywordText)) {
+          return false
         }
-        return item.name.toLocaleLowerCase().startsWith(keyword)
+        if (searchKeywordText && !itemName.includes(searchKeywordText)) {
+          return false
+        }
+        return true
       })
   })
 
-  const debouncedSync = useDebounceFn(async (input: string, previousInput: string) => {
+  const debouncedSync = useDebounceFn(async (input: string, previousInput: string, syncId: number) => {
+    if (syncId !== latestInputSyncId) {
+      return
+    }
+
     if (!canonicalRootPath.value) {
       return
     }
@@ -107,6 +119,10 @@ export function useFilePickerController(options: UseFilePickerControllerOptions)
     }
 
     await syncByInput(input, previousInput)
+  }, 300)
+
+  const debouncedApplySearchQuery = useDebounceFn((value: string) => {
+    appliedSearchQuery.value = value.trim()
   }, 300)
 
   watch(
@@ -128,12 +144,35 @@ export function useFilePickerController(options: UseFilePickerControllerOptions)
     { immediate: true },
   )
 
-  watch(() => inputText.value, (value, previousValue) => {
+  watch(() => inputText.value, (value, previousInput = '') => {
     if (skipInputWatch.value) {
       return
     }
-    debouncedSync(value, previousValue ?? '')
+    const syncId = ++latestInputSyncId
+    if (shouldSyncInputImmediately(value, previousInput)) {
+      void syncByInput(value, previousInput)
+      return
+    }
+    debouncedSync(value, previousInput, syncId)
   })
+
+  function parseInputForSync(input: string, previousInput: string) {
+    const fallbackDir = resolveFilePickerInputFallbackDir(input, previousInput, currentDir.value)
+    return parseFilePickerInput(input, fallbackDir)
+  }
+
+  function shouldSyncInputImmediately(input: string, previousInput: string): boolean {
+    if (!input.trim()) {
+      return true
+    }
+
+    const parsed = parseInputForSync(input, previousInput)
+    if (parsed.rejectAbsolutePath) {
+      return false
+    }
+
+    return !parsed.keyword.trim() && normalizeRelativePath(parsed.directoryPath) === currentDir.value
+  }
 
   function getFileExt(name: string): string {
     const match = /\.[^./\\]+$/.exec(name)
@@ -232,22 +271,28 @@ export function useFilePickerController(options: UseFilePickerControllerOptions)
   }
 
   async function syncByInput(input: string, previousInput: string) {
-    const fallbackDir = resolveFilePickerInputFallbackDir(input, previousInput, currentDir.value)
-    const parsed = parseFilePickerInput(input, fallbackDir)
+    const parsed = parseInputForSync(input, previousInput)
     if (parsed.rejectAbsolutePath) {
       return
     }
 
-    if (!parsed.shouldNavigate) {
-      const targetDir = normalizeRelativePath(parsed.directoryPath)
-      if (targetDir !== currentDir.value) {
-        await loadDirectory(targetDir, parsed.keyword)
-        return
-      }
-      filterKeyword.value = parsed.keyword.trim()
+    const targetDir = normalizeRelativePath(parsed.directoryPath)
+    const keyword = parsed.keyword.trim()
+
+    if (!keyword && targetDir === currentDir.value) {
+      filterKeyword.value = ''
       return
     }
-    await loadDirectory(parsed.directoryPath, parsed.keyword)
+
+    if (!parsed.shouldNavigate) {
+      if (targetDir !== currentDir.value) {
+        await loadDirectory(targetDir, keyword)
+        return
+      }
+      filterKeyword.value = keyword
+      return
+    }
+    await loadDirectory(targetDir, keyword)
   }
 
   function setInputSilently(value: string) {
@@ -283,6 +328,9 @@ export function useFilePickerController(options: UseFilePickerControllerOptions)
     }
     const syncInputWithModel = openOptions.syncInputWithModel ?? true
     isOpen.value = true
+    searchQuery.value = ''
+    appliedSearchQuery.value = ''
+    debouncedApplySearchQuery('')
     if (syncInputWithModel) {
       setInputSilently(options.modelValue())
     }
@@ -374,6 +422,16 @@ export function useFilePickerController(options: UseFilePickerControllerOptions)
     }
   }
 
+  function handleSearchQueryChange(value: string) {
+    searchQuery.value = value
+    if (!value.trim()) {
+      appliedSearchQuery.value = ''
+      debouncedApplySearchQuery('')
+      return
+    }
+    debouncedApplySearchQuery(value)
+  }
+
   function handleEnter() {
     commitInputValue()
     isOpen.value = false
@@ -461,6 +519,7 @@ export function useFilePickerController(options: UseFilePickerControllerOptions)
     handleInputFocus,
     handleInputKeydown,
     handleNavigateItem,
+    handleSearchQueryChange,
     handlePopoverFocusIn,
     handlePopoverFocusOut,
     handlePopoverOpenAutoFocus,
@@ -470,5 +529,6 @@ export function useFilePickerController(options: UseFilePickerControllerOptions)
     isLoading,
     isOpen,
     openPopover,
+    searchQuery,
   }
 }

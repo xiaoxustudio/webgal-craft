@@ -5,6 +5,8 @@ import { AppError } from '~/types/errors'
 
 import { useFilePickerController } from '../useFilePickerController'
 
+import type { FileViewerItem } from '~/types/file-viewer'
+
 const {
   existsMock,
   joinMock,
@@ -44,8 +46,10 @@ function createFixture(options: ControllerFixtureOptions = {}) {
   const disabled = ref(false)
   const reopenInSelectedParent = ref(options.reopenInSelectedParent ?? false)
   const scope = effectScope()
-  const readDirectory = vi.fn(async (_path: string, request: { requestId: number }) => ({
-    absolutePath: '/assets',
+  const readDirectory = vi.fn(async (
+    _path: string,
+    request: { requestId: number },
+  ): Promise<{ items: FileViewerItem[], requestId: number }> => ({
     items: [],
     requestId: request.requestId,
   }))
@@ -155,7 +159,6 @@ describe('useFilePickerController 行为', () => {
 
     readDirectory
       .mockResolvedValueOnce({
-        absolutePath: '/assets/images/bg',
         items: [],
         requestId: 1,
       })
@@ -198,6 +201,151 @@ describe('useFilePickerController 行为', () => {
 
     expect(modelValue.value).toBe('images/bg/original.png')
     expect(controller.inputText.value).toBe('images/bg/original.png')
+
+    scope.stop()
+  })
+
+  it('路径输入前缀过滤会先于搜索框包含过滤叠加生效', async () => {
+    const { controller, readDirectory, scope } = createFixture()
+
+    readDirectory.mockImplementation(async (_path: string, request: { requestId: number }) => ({
+      items: [
+        {
+          isDir: false,
+          name: 'opening.png',
+          path: '/assets/opening.png',
+        },
+        {
+          isDir: false,
+          name: 'option.png',
+          path: '/assets/option.png',
+        },
+        {
+          isDir: false,
+          name: 'top-opening.png',
+          path: '/assets/top-opening.png',
+        },
+        {
+          isDir: false,
+          name: 'ending.png',
+          path: '/assets/ending.png',
+        },
+      ],
+      requestId: request.requestId,
+    }))
+
+    await flushControllerTasks()
+    await controller.openPopover()
+
+    controller.inputText.value = 'op'
+    await vi.advanceTimersByTimeAsync(300)
+    await flushControllerTasks()
+
+    expect(controller.filterKeyword.value).toBe('op')
+    expect(controller.filteredItems.value.map(item => item.name)).toEqual(['opening.png', 'option.png'])
+
+    controller.handleSearchQueryChange('ning')
+
+    expect(controller.searchQuery.value).toBe('ning')
+    expect(controller.inputText.value).toBe('op')
+    expect(controller.filteredItems.value.map(item => item.name)).toEqual(['opening.png', 'option.png'])
+
+    await vi.advanceTimersByTimeAsync(299)
+    await flushControllerTasks()
+
+    expect(controller.searchQuery.value).toBe('ning')
+    expect(controller.filteredItems.value.map(item => item.name)).toEqual(['opening.png', 'option.png'])
+
+    await vi.advanceTimersByTimeAsync(1)
+    await flushControllerTasks()
+
+    expect(controller.searchQuery.value).toBe('ning')
+    expect(controller.filteredItems.value.map(item => item.name)).toEqual(['opening.png'])
+
+    controller.handleSearchQueryChange('')
+
+    expect(controller.searchQuery.value).toBe('')
+    expect(controller.filteredItems.value.map(item => item.name)).toEqual(['opening.png', 'option.png'])
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushControllerTasks()
+
+    expect(controller.filteredItems.value.map(item => item.name)).toEqual(['opening.png', 'option.png'])
+
+    scope.stop()
+  })
+
+  it('手动清空输入会立即回到根目录并取消挂起的防抖同步', async () => {
+    const { controller, readDirectory, scope } = createFixture({
+      modelValue: 'images/bg/opening.png',
+      reopenInSelectedParent: true,
+    })
+
+    await flushControllerTasks()
+    await controller.openPopover()
+
+    expect(readDirectory).toHaveBeenCalledTimes(1)
+    expect(readDirectory).toHaveBeenLastCalledWith('/assets/images/bg', {
+      rootPath: '/assets',
+      requestId: 1,
+    })
+    expect(controller.currentDir.value).toBe('images/bg')
+
+    controller.inputText.value = 'images/bg/op'
+    controller.inputText.value = ''
+    await flushControllerTasks()
+
+    expect(controller.currentDir.value).toBe('')
+    expect(controller.filterKeyword.value).toBe('')
+    expect(readDirectory).toHaveBeenCalledTimes(2)
+    expect(readDirectory.mock.lastCall).toEqual([
+      expect.stringMatching(/^\/assets\/?$/),
+      {
+        rootPath: '/assets',
+        requestId: 2,
+      },
+    ])
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushControllerTasks()
+
+    expect(controller.currentDir.value).toBe('')
+    expect(controller.filterKeyword.value).toBe('')
+    expect(readDirectory).toHaveBeenCalledTimes(2)
+
+    scope.stop()
+  })
+
+  it('删除到当前目录时会立即清除过滤且不重新读取目录', async () => {
+    const { controller, readDirectory, scope } = createFixture({
+      modelValue: 'images/bg/opening.png',
+      reopenInSelectedParent: true,
+    })
+
+    await flushControllerTasks()
+    await controller.openPopover()
+
+    controller.inputText.value = 'images/bg/op'
+    await vi.advanceTimersByTimeAsync(300)
+    await flushControllerTasks()
+
+    expect(controller.currentDir.value).toBe('images/bg')
+    expect(controller.filterKeyword.value).toBe('op')
+    expect(readDirectory).toHaveBeenCalledTimes(2)
+
+    controller.inputText.value = 'images/bg/'
+    await flushControllerTasks()
+
+    expect(controller.currentDir.value).toBe('images/bg')
+    expect(controller.filterKeyword.value).toBe('')
+    expect(readDirectory).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushControllerTasks()
+
+    expect(controller.currentDir.value).toBe('images/bg')
+    expect(controller.filterKeyword.value).toBe('')
+    expect(readDirectory).toHaveBeenCalledTimes(2)
 
     scope.stop()
   })
